@@ -6,7 +6,7 @@ import (
 	"log"
 	"sync"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 // Factory 是 Session 与具体渲染后端之间的唯一接缝：给定会话资源，产出 Runner。

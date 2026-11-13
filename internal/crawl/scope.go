@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 // ScopeModes 是合法的作用域档位。

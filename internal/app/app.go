@@ -13,13 +13,13 @@ import (
 	"strings"
 	"sync"
 
-	"browcrawler/internal/browserrunner"
-	"browcrawler/internal/config"
-	"browcrawler/internal/crawl"
-	"browcrawler/internal/metrics"
-	"browcrawler/internal/policy"
-	"browcrawler/internal/pool"
-	"browcrawler/internal/session"
+	"github.com/winezer0/browcrawler/internal/browserrunner"
+	"github.com/winezer0/browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/crawl"
+	"github.com/winezer0/browcrawler/internal/metrics"
+	"github.com/winezer0/browcrawler/internal/policy"
+	"github.com/winezer0/browcrawler/internal/pool"
+	"github.com/winezer0/browcrawler/internal/session"
 )
 
 type App struct {

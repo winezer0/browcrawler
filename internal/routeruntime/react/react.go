@@ -6,7 +6,7 @@
 // 纯 CSR 的 React 应用由 generic（pushState hook）兜底。
 package react
 
-import "browcrawler/internal/routeruntime/probe"
+import "github.com/winezer0/browcrawler/internal/routeruntime/probe"
 
 // Probe 返回 React 系探针。
 func Probe() probe.Probe {

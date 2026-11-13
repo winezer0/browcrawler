@@ -6,7 +6,7 @@ import (
 
 	"github.com/winezer0/requestfilter"
 
-	"browcrawler/internal/metrics"
+	"github.com/winezer0/browcrawler/internal/metrics"
 )
 
 // DedupSession 封装 requestfilter 的流式去重会话（形状覆盖 + 动态路径段泛化）。

@@ -17,10 +17,10 @@ import (
 	"github.com/winezer0/basecrawler/safety"
 	"github.com/winezer0/requestfilter"
 
-	"browcrawler/internal/config"
-	"browcrawler/internal/metrics"
-	"browcrawler/internal/policy"
-	"browcrawler/internal/storage"
+	"github.com/winezer0/browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/metrics"
+	"github.com/winezer0/browcrawler/internal/policy"
+	"github.com/winezer0/browcrawler/internal/storage"
 )
 
 type Stats struct {

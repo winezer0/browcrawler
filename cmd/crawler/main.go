@@ -16,8 +16,8 @@ import (
 	"strings"
 	"syscall"
 
-	"browcrawler/internal/app"
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/app"
+	"github.com/winezer0/browcrawler/internal/config"
 
 	"github.com/alecthomas/kong"
 )

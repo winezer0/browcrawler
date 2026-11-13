@@ -7,7 +7,7 @@ import (
 	"github.com/winezer0/basecrawler/extractor"
 	"golang.org/x/net/html"
 
-	"browcrawler/internal/storage"
+	"github.com/winezer0/browcrawler/internal/storage"
 )
 
 // Discovery 是从页面/JS 中挖掘出的 URL 或接口。

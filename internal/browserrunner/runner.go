@@ -26,7 +26,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 type Runner interface {

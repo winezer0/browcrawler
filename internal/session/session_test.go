@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"browcrawler/internal/browserrunner"
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/browserrunner"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 type fakeCA struct{}

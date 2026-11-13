@@ -1,4 +1,4 @@
-module browcrawler
+module github.com/winezer0/browcrawler
 
 go 1.26.0
 

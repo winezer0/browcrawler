@@ -4,7 +4,7 @@
 // 此处只做运行时对象兜底。
 package next
 
-import "browcrawler/internal/routeruntime/probe"
+import "github.com/winezer0/browcrawler/internal/routeruntime/probe"
 
 // Probe 返回 Next.js 探针。
 func Probe() probe.Probe {

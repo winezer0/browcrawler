@@ -4,7 +4,7 @@
 // 此探针尝试 ng.probe + injector 字符串键（Partial 化的 Router 令牌）。
 package angular
 
-import "browcrawler/internal/routeruntime/probe"
+import "github.com/winezer0/browcrawler/internal/routeruntime/probe"
 
 // Probe 返回 Angular 探针。
 func Probe() probe.Probe {

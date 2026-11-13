@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 func newTestLimiter(t *testing.T, mutate func(*config.Config)) *Limiter {

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"browcrawler/internal/browserrunner"
-	"browcrawler/internal/config"
-	"browcrawler/internal/session"
+	"github.com/winezer0/browcrawler/internal/browserrunner"
+	"github.com/winezer0/browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/session"
 )
 
 type fakeCA struct{}

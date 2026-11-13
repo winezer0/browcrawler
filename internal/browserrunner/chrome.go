@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 // ChromeRunner 用 Chrome for Testing 便携版作为降级渲染后端。

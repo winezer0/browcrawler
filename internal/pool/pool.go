@@ -15,10 +15,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"browcrawler/internal/ca"
-	"browcrawler/internal/config"
-	"browcrawler/internal/metrics"
-	"browcrawler/internal/session"
+	"github.com/winezer0/browcrawler/internal/ca"
+	"github.com/winezer0/browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/metrics"
+	"github.com/winezer0/browcrawler/internal/session"
 )
 
 type Options struct {

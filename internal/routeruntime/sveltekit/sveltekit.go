@@ -4,7 +4,7 @@
 // 构建的 __sveltekit 调试对象，命中即收益，未命中静默跳过。
 package sveltekit
 
-import "browcrawler/internal/routeruntime/probe"
+import "github.com/winezer0/browcrawler/internal/routeruntime/probe"
 
 // Probe 返回 SvelteKit 探针。
 func Probe() probe.Probe {

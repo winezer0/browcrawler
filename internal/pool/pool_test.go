@@ -6,9 +6,9 @@ import (
 	"log"
 	"testing"
 
-	"browcrawler/internal/browserrunner"
-	"browcrawler/internal/config"
-	"browcrawler/internal/session"
+	"github.com/winezer0/browcrawler/internal/browserrunner"
+	"github.com/winezer0/browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/session"
 )
 
 func newTestPool(t *testing.T, max int) *Pool {

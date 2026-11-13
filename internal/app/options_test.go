@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 func TestOverridesApply(t *testing.T) {

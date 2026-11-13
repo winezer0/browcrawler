@@ -7,7 +7,7 @@ import (
 
 	"github.com/winezer0/requestfilter"
 
-	"browcrawler/internal/metrics"
+	"github.com/winezer0/browcrawler/internal/metrics"
 )
 
 // 容量拒断必须 fail-open：MaxEntries 耗尽后 Reserve 返回 ActionReject，

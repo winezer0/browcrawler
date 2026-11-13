@@ -14,14 +14,14 @@ import (
 	"fmt"
 	"strings"
 
-	"browcrawler/internal/routeruntime/angular"
-	"browcrawler/internal/routeruntime/generic"
-	"browcrawler/internal/routeruntime/next"
-	"browcrawler/internal/routeruntime/nuxt"
-	"browcrawler/internal/routeruntime/probe"
-	"browcrawler/internal/routeruntime/react"
-	"browcrawler/internal/routeruntime/sveltekit"
-	"browcrawler/internal/routeruntime/vue"
+	"github.com/winezer0/browcrawler/internal/routeruntime/angular"
+	"github.com/winezer0/browcrawler/internal/routeruntime/generic"
+	"github.com/winezer0/browcrawler/internal/routeruntime/next"
+	"github.com/winezer0/browcrawler/internal/routeruntime/nuxt"
+	"github.com/winezer0/browcrawler/internal/routeruntime/probe"
+	"github.com/winezer0/browcrawler/internal/routeruntime/react"
+	"github.com/winezer0/browcrawler/internal/routeruntime/sveltekit"
+	"github.com/winezer0/browcrawler/internal/routeruntime/vue"
 )
 
 // Route 是一次运行时捕获到的路由。

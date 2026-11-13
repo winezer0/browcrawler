@@ -17,12 +17,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"browcrawler/internal/browserrunner"
-	"browcrawler/internal/ca"
-	"browcrawler/internal/config"
-	"browcrawler/internal/crawl"
-	"browcrawler/internal/proxyrunner"
-	"browcrawler/internal/storage"
+	"github.com/winezer0/browcrawler/internal/browserrunner"
+	"github.com/winezer0/browcrawler/internal/ca"
+	"github.com/winezer0/browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/crawl"
+	"github.com/winezer0/browcrawler/internal/proxyrunner"
+	"github.com/winezer0/browcrawler/internal/storage"
 )
 
 // OutputPaths 是「本会话独占」的输出路径；池化时由上层按 sessionID 生成，避免并发写同一文件。

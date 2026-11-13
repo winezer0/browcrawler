@@ -3,7 +3,7 @@ package crawl
 import (
 	"testing"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 func TestLegacyScope(t *testing.T) {

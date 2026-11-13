@@ -3,7 +3,7 @@
 // $router（getRoutes 含动态 addRoute）。
 package nuxt
 
-import "browcrawler/internal/routeruntime/probe"
+import "github.com/winezer0/browcrawler/internal/routeruntime/probe"
 
 // Probe 返回 Nuxt 探针。
 func Probe() probe.Probe {

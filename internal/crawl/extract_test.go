@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"browcrawler/internal/storage"
+	"github.com/winezer0/browcrawler/internal/storage"
 )
 
 // ExtractJS 换用 assetcrawler extractor（jsext）后的行为锚点：

@@ -17,10 +17,10 @@ import (
 	"context"
 	"net/url"
 
-	"browcrawler/internal/metrics"
-	"browcrawler/internal/routeruntime"
-	"browcrawler/internal/routeruntime/generic"
-	"browcrawler/internal/storage"
+	"github.com/winezer0/browcrawler/internal/metrics"
+	"github.com/winezer0/browcrawler/internal/routeruntime"
+	"github.com/winezer0/browcrawler/internal/routeruntime/generic"
+	"github.com/winezer0/browcrawler/internal/storage"
 
 	"github.com/go-rod/rod"
 )

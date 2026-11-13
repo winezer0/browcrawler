@@ -4,7 +4,7 @@
 // Vue 2：遍历 DOM 找 __vue__ 实例的 $router.options.routes。
 package vue
 
-import "browcrawler/internal/routeruntime/probe"
+import "github.com/winezer0/browcrawler/internal/routeruntime/probe"
 
 // Probe 返回 Vue 框架探针。
 func Probe() probe.Probe {

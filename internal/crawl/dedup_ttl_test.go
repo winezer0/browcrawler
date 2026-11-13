@@ -8,7 +8,7 @@ import (
 
 	"github.com/winezer0/requestfilter"
 
-	"browcrawler/internal/metrics"
+	"github.com/winezer0/browcrawler/internal/metrics"
 )
 
 // EntryTTL 透传验证：条目过期后同形状重新放行（容量自然回收）。

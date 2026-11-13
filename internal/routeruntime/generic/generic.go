@@ -3,7 +3,7 @@
 // 实际导航路径 + 当前 location。全部框架的最小保障。
 package generic
 
-import "browcrawler/internal/routeruntime/probe"
+import "github.com/winezer0/browcrawler/internal/routeruntime/probe"
 
 // HookJS 是 driver 在导航前注入的常驻脚本：包装 pushState/replaceState，
 // 把每次编程式导航记录进 window.__browcrawler_routes。

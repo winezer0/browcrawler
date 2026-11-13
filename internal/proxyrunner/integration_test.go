@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"browcrawler/internal/storage"
+	"github.com/winezer0/browcrawler/internal/storage"
 )
 
 // startProxy 起一个真实 goproxy 实例（不依赖 Obscura），用于验证录制链路集成行为。

@@ -10,7 +10,7 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 
-	"browcrawler/internal/storage"
+	"github.com/winezer0/browcrawler/internal/storage"
 )
 
 // PageDriver 把浏览器页面能力抽象出来，后续可替换 Chrome/自研 CDP 客户端。

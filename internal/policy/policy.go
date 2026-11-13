@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 var (

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 func TestBuildObscuraArgs(t *testing.T) {

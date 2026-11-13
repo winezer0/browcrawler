@@ -16,7 +16,7 @@ import (
 
 	"github.com/elazarl/goproxy"
 
-	"browcrawler/internal/storage"
+	"github.com/winezer0/browcrawler/internal/storage"
 )
 
 type Runner struct {

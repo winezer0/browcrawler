@@ -3,7 +3,7 @@ package app
 import (
 	"strings"
 
-	"browcrawler/internal/config"
+	"github.com/winezer0/browcrawler/internal/config"
 )
 
 // Overrides 是 CLI flag 的结构化投影；-1 / 空串 / false 表示「未指定」。
