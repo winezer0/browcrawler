@@ -72,9 +72,9 @@ form_submit 默认自动提交页面全部表单、自动跟随全部链接。sa
 
 ## 补充说明（给执行 Agent 的决策边界）
 
-- **不做**：assetcrawler 侧不加 safety——其架构是「只报告，显式授权才行动」，
+- **不做**：basecrawler 侧不加 safety——其架构是「只报告，显式授权才行动」，
   危险口全部已有 opt-in 闸门，自动防护层属冗余（见 docs/对标分析.md）。
-  **状态更新（2026-11-13）**：此论断已过时。assetcrawler 自 11-12 起默认自动
+  **状态更新（2026-11-13）**：此论断已过时。basecrawler 自 11-12 起默认自动
   填充并发送全部方法的测试请求，已实现自己的 safety 链；随后两边统一为
   直接调用公共包 `github.com/winezer0/basecrawler/safety`，本项目
   `internal/crawl/safety.go` 的重复实现已删除。本提示词保留为 F1 实施记录。

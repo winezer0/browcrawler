@@ -94,7 +94,7 @@ func New(o Options) (*Crawler, error) {
 		return nil, err
 	}
 	// 直接使用公共工具包 github.com/winezer0/basecrawler/safety，
-	// 与 assetcrawler 共用同一份词表与判定逻辑（本项目不再维护副本）。
+	// 与 basecrawler 共用同一份词表与判定逻辑（本项目不再维护副本）。
 	safetyFn, err := safety.NewSafety(o.Cfg.Crawl.Safety,
 		o.Cfg.Crawl.SafetyURLSkip, o.Cfg.Crawl.SafetyFormSkip)
 	if err != nil {

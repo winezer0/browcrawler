@@ -1,6 +1,6 @@
 // Package next：Next.js 运行时路由探针。
 // Pages Router：window.next.router.components 的键即已注册页面路径；
-// App Router：self.__next_f RSC 流属静态可解析（assetcrawler 已覆盖），
+// App Router：self.__next_f RSC 流属静态可解析（basecrawler 已覆盖），
 // 此处只做运行时对象兜底。
 package next
 

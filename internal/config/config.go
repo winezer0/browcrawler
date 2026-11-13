@@ -46,7 +46,7 @@ type CrawlConfig struct {
 	// WSCapture WebSocket 帧捕获（默认开，纯只读观察）：经 CDP Network 事件
 	// 记录 WS 建连/握手/帧/关闭，帧以 resource_type=websocket 进 JSONL。
 	WSCapture bool `yaml:"ws_capture"`
-	// FeedPath 外部资产回灌文件（assetcrawler JSONL 或纯文本 URL 列表）：
+	// FeedPath 外部资产回灌文件（basecrawler JSONL 或纯文本 URL 列表）：
 	// 静态发现的 chunk/路由/候选 URL 由浏览器真实打开并录制请求包。空 = 不灌。
 	FeedPath string `yaml:"feed"`
 	// Safety 危险操作防护（默认开）：登出/改密码/删除类 URL 与表单不真实
@@ -61,7 +61,7 @@ type CrawlConfig struct {
 	// 交付物（discovered/requests/report）默认过滤域外，JSONL 附 InScope 标记。
 	ScopeMode      string  `yaml:"scope_mode"`
 	ScopeValue     string  `yaml:"scope_value"` // dnk: 关键字；regex: 正则；fqdn/rdn 留空用 seed 主机
-	JSExtract      bool    `yaml:"js_extract"`  // JS 接口提取（assetcrawler extractor 响应处理包）
+	JSExtract      bool    `yaml:"js_extract"`  // JS 接口提取（basecrawler extractor 响应处理包）
 	SkipStaticBody bool    `yaml:"skip_static_body"`
 	SettleMS       int     `yaml:"settle_ms"`
 	MaxPages       int     `yaml:"max_pages"`    // 0 = 不限

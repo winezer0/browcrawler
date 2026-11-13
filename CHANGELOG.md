@@ -10,15 +10,15 @@
   的重复词表与判定实现，`crawler.go` / `forms.go` 直接 import 并使用
   `*safety.Safety`，`safety_test.go` 改为对公共包做黑盒回归。
   两个项目从此共用同一份词表与判定逻辑。
-- `go.mod` 升级 `assetcrawler` 到 `v0.5.0` 并删除本地 `replace`：`safety/`
+- `go.mod` 升级 `basecrawler` 到 `v0.5.0` 并删除本地 `replace`：`safety/`
   已随该版本发布，CI 与他人 clone 不再依赖本机路径。`go mod tidy` 后
   `requestfilter` 保持 `v0.1.3`，indirect 依赖与 `v0.5.0` 的模块图一致。
-- 文档更正：`docs/提示词-F1-safety.md` 与 `docs/对标分析.md` 中「assetcrawler
+- 文档更正：`docs/提示词-F1-safety.md` 与 `docs/对标分析.md` 中「basecrawler
   不需要 safety」的论断已过时，补状态注记。
 
 ### 已验证
 `go mod tidy` / `go build ./...` / `go vet ./...` / `go test ./...` 全部通过；
-上游 `assetcrawler v0.5.0` 已推送并打 tag。本项目本轮改动仅本地提交，
+上游 `basecrawler v0.5.0` 已推送并打 tag。本项目本轮改动仅本地提交，
 未推送远端。
 
 ## [v0.2.0] — 2026-11-09
@@ -73,7 +73,7 @@
 ### Added
 
 - **BREAKING（CLI）**：JS 接口提取引擎由 BishopFox/jsluice 更换为
-  assetcrawler `extractor` 响应处理包（正则档，包内自带噪声/静态资源/模板
+  basecrawler `extractor` 响应处理包（正则档，包内自带噪声/静态资源/模板
   占位过滤）；配置键 `jsluice` → `js_extract`，CLI `--no-jsluice` →
   `--no-js-extract`，发现 source 前缀 `jsluice:*` → `jsext:*`
 - safety 危险操作防护（默认开，`--no-safety` 关闭）：登出/改密码/删除类 URL

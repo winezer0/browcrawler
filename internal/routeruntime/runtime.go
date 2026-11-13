@@ -6,7 +6,7 @@
 // 去重，交给调用方回灌队列。
 //
 // 只读原则：探针只读取对象/触发查询，不修改页面状态、不执行业务代码
-// （区别于 assetcrawler -route-exec 的主动执行模式）。
+// （区别于 basecrawler -route-exec 的主动执行模式）。
 package routeruntime
 
 import (

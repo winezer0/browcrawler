@@ -1,14 +1,14 @@
-# assetcrawler 解析包统一化改造——实施提示词
+# basecrawler 解析包统一化改造——实施提示词
 
-> 用途：把本提示词交给任意 Agent 即可在 assetcrawler 仓库独立完成改造。
-> 背景：browcrawler 已接入 `extractor.FromJS`（正则档）。本次把 assetcrawler 的
+> 用途：把本提示词交给任意 Agent 即可在 basecrawler 仓库独立完成改造。
+> 背景：browcrawler 已接入 `extractor.FromJS`（正则档）。本次把 basecrawler 的
 > 解析能力收敛为**一个独立包 + 一个配置结构体**，让外部工具（browcrawler 等）
 > 一次 import 拿到全部解析能力，开关统一配置。
 
 ## 提示词（可直接复制）
 
 ```
-在 assetcrawler 项目（GitHub: winezer0/assetcrawler，Go 1.26，分支 main）
+在 basecrawler 项目（GitHub: winezer0/basecrawler，Go 1.26，分支 main）
 实施「解析包统一化对外提供」改造。先读 AGENTS.md/AGENTS.common.md（无则跳过）。
 实施前确认 git 干净；分两个提交：①统一包+配置结构体 ②旧包兼容映射。
 
@@ -93,7 +93,7 @@
   func(src string) ([]base.Request, bool)
 ```
 
-## 给 assetcrawler 维护者的补充说明
+## 给 basecrawler 维护者的补充说明
 
 - **消费方锚点**：browcrawler 的接入点只有两处——`extractor.FromJS`（已用，
   统一后换 `pkg/parse.ParseJS`）与 `Options.JSExtract` 注入（预留 AST 升级）。

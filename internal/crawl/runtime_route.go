@@ -10,7 +10,7 @@
 //     BFS 队列真实打开——渲染对应懒加载页面，其 XHR/chunk 被 MITM 录制。
 //
 // 只读约束：探针只读取框架暴露的路由对象，不触发业务逻辑（与
-// assetcrawler -route-exec 的主动执行模式划清边界）。
+// basecrawler -route-exec 的主动执行模式划清边界）。
 package crawl
 
 import (

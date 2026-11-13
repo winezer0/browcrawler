@@ -174,7 +174,7 @@ def check_core_bfs(rep: Report) -> tuple[list[dict], list[dict], str]:
     rep.add("A4 渲染后懒加载接口 /api/lazy", any("/api/lazy" in u for u in urls))
     rep.add("A5 渲染后接口 /api/data?id=2", any("/api/data?id=2" in u for u in urls))
     js = [d for d in discs if str(d.get("source", "")).startswith("jsext")]
-    rep.add("A6 jsext 提取 JS 接口（assetcrawler extractor）", any("/api/v1/user" in d.get("url", "") for d in js),
+    rep.add("A6 jsext 提取 JS 接口（basecrawler extractor）", any("/api/v1/user" in d.get("url", "") for d in js),
             f"js_links={len(js)}")
     submits = [r for r in rows if r["method"] == "POST" and r["url"].endswith("/submit")]
     rep.add("A7 表单自动提交产生 POST /submit",

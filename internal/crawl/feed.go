@@ -1,13 +1,13 @@
-// feed.go：外部资产发现结果回灌（assetcrawler 对接）。
+// feed.go：外部资产发现结果回灌（basecrawler 对接）。
 //
-// 设计：assetcrawler 负责静态发现（HTML 20+ 标签、JS AST、chunk graph、
+// 设计：basecrawler 负责静态发现（HTML 20+ 标签、JS AST、chunk graph、
 // importmap、SSR payload、sitemap、OpenAPI 探测——发现面远大于浏览器渲染），
 // browcrawler 经 -feed 把它的结果灌进 BFS 队列，由浏览器真实打开并 MITM
 // 录制完整请求包——静态发现拿不到请求包的部分（懒加载 chunk、前端路由、
 // XHR 链）由此闭环。
 //
 // 输入格式自动识别（按行）：
-//   - JSON 行：assetcrawler Result（URL 必填；Method/Kind/Source/Confidence
+//   - JSON 行：basecrawler Result（URL 必填；Method/Kind/Source/Confidence
 //     可选，未知字段忽略）
 //   - 纯文本行：每行一个绝对 URL（ffuf/dirsearch/URLFinder 的 txt 输出直接可用）
 package crawl
@@ -25,11 +25,11 @@ import (
 type FeedSeed struct {
 	URL    string
 	Method string // 空 = GET；非 GET 只记录为发现（浏览器导航仅 GET）
-	Kind   string // assetcrawler: chunk|route（透传到 discovered.source）
-	Source string // assetcrawler 的 Source 透传，便于溯源
+	Kind   string // basecrawler: chunk|route（透传到 discovered.source）
+	Source string // basecrawler 的 Source 透传，便于溯源
 }
 
-// LoadFeed 读取 -feed 文件：JSONL（assetcrawler）或纯文本 URL 列表。
+// LoadFeed 读取 -feed 文件：JSONL（basecrawler）或纯文本 URL 列表。
 // 解析失败的行跳过并在 error 汇总中注明（不因个别脏行放弃整批）。
 func LoadFeed(path string) ([]FeedSeed, error) {
 	f, err := os.Open(path)

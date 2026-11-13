@@ -40,7 +40,7 @@ crawl:
   # 危险操作防护（默认开）：登出/改密码/删除类 URL 与表单不真实触发，
   # 发现不受损（仍进 discovered，source=url-skipped/form-skipped）。
   # 判定实现来自公共工具包 github.com/winezer0/basecrawler/safety，
-  # 与 assetcrawler 共用同一份词表（本项目不再维护副本）。
+  # 与 basecrawler 共用同一份词表（本项目不再维护副本）。
   # 误伤真实路径时修正内置词表或 CLI --no-safety 临时关闭并在报告注明
   safety: true
   # 追加危险正则（对内置词表叠加）：URL 匹配原始链接串；表单匹配
