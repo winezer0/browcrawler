@@ -13,7 +13,7 @@ import (
 // Discovery 是从页面/JS 中挖掘出的 URL 或接口。
 type Discovery struct {
 	URL    string `json:"url"`
-	Source string `json:"source"` // a@href / iframe@src / form@action / script@src / jsext:js ...
+	Source string `json:"source"` // a@href / iframe@src / form@action / script@src / regex:js ...
 	From   string `json:"from"`
 	Depth  int    `json:"depth"`
 	Method string `json:"method,omitempty"`
@@ -69,9 +69,9 @@ func ExtractLinks(base, doc string) []Discovery {
 	return out
 }
 
-// ExtractJS uses basecrawler/parse to extract URL candidates from recorded JS
-// response bodies. The default parse options keep extraction static and cover
-// absolute URLs, quoted paths, and relative paths.
+// ExtractJS uses basecrawler/parse in JSModeRegex to extract URL candidates
+// from recorded JS response bodies, including absolute URLs, quoted paths,
+// and relative paths.
 func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 	baseURL, err := url.Parse(base)
 	if err != nil {
@@ -80,6 +80,7 @@ func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 	var out []Discovery
 	seen := map[string]bool{}
 	parseOptions := parse.DefaultOptions()
+	parseOptions.JSMode = parse.JSModeRegex
 	for _, jb := range jsBodies {
 		for _, req := range parse.ParseJS(jb.Body, parseOptions) {
 			raw := strings.TrimSpace(req.Raw)
@@ -94,9 +95,9 @@ func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 				continue
 			}
 			seen[abs] = true
-			src := "jsext"
+			src := "regex"
 			if req.Source != "" {
-				src = "jsext:" + req.Source
+				src = "regex:" + req.Source
 			}
 			out = append(out, Discovery{URL: abs, Source: src, From: jb.URL, Method: req.Method})
 		}
