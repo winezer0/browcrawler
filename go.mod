@@ -7,7 +7,7 @@ require (
 	github.com/elazarl/goproxy v1.7.2
 	github.com/go-rod/rod v0.116.2
 	github.com/gorilla/websocket v1.5.3
-	github.com/winezer0/basecrawler v0.0.1
+	github.com/winezer0/basecrawler v0.0.0
 	github.com/winezer0/requestfilter v0.1.3
 	golang.org/x/net v0.62.0
 	gopkg.in/yaml.v3 v3.0.1
