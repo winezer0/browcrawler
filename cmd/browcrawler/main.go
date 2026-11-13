@@ -46,7 +46,7 @@ type cli struct {
 	ObeyRobots      bool    `name:"obey-robots" help:"遵守目标站点 robots.txt"`
 	ScopeMode       string  `name:"scope-mode" help:"作用域档位 fqdn|rdn|dnk|regex|all（空=legacy 由 --scope 推导）"`
 	ScopeValue      string  `name:"scope-value" help:"scope-mode=dnk 的关键字 / regex 的正则；fqdn/rdn 留空用 seed 主机"`
-	NoJSExtract     bool    `name:"no-js-extract" help:"关闭 JS 接口提取（basecrawler extractor）"`
+	NoJSExtract     bool    `name:"no-js-extract" help:"关闭 JS 接口提取（basecrawler/pkg/parse）"`
 	NoRuntimeRoute  bool    `name:"no-runtime-route" help:"关闭运行时路由捕获"`
 	FeedPath        string  `name:"feed" help:"外部资产回灌文件：basecrawler JSONL 或纯文本 URL 列表"`
 	NoWSCapture     bool    `name:"no-ws-capture" help:"关闭 WebSocket 帧捕获"`

@@ -1,4 +1,4 @@
-// Package crawl 实现 BFS 调度、DOM 链接提取、JS 接口提取（basecrawler extractor）与 rod 页面驱动。
+// Package crawl 实现 BFS 调度、DOM 链接提取、JS 接口提取（basecrawler/pkg/parse）与 rod 页面驱动。
 package crawl
 
 import (

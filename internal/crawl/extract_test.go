@@ -7,7 +7,7 @@ import (
 	"github.com/winezer0/browcrawler/internal/storage"
 )
 
-// ExtractJS 换用 basecrawler extractor（jsext）后的行为锚点：
+// ExtractJS 换用 basecrawler/pkg/parse（jsext）后的行为锚点：
 // 绝对路径/相对路径提取 + 相对 seed 解析 + Method 透传。
 func TestExtractJSWithAssetExtractor(t *testing.T) {
 	bodies := []storage.JSBody{
