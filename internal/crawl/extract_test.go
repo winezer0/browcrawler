@@ -21,6 +21,9 @@ func TestExtractJSParserModes(t *testing.T) {
 	byURL := map[string]Discovery{}
 	for _, d := range discs {
 		byURL[d.URL] = d
+		if d.URL == "http://t.test/api/v1/user/list" && d.Source != "ast:goja" {
+			t.Fatalf("ordinary JavaScript should use the Goja fast path, got %q", d.Source)
+		}
 		if !strings.HasPrefix(d.Source, "regex:") && !strings.HasPrefix(d.Source, "ast:") {
 			t.Fatalf("source 前缀应为 regex: %s", d.Source)
 		}
