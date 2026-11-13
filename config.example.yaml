@@ -1,0 +1,112 @@
+# goproxy + Obscura 混合式爬虫配置
+# Obscura v0.2.6 / Chrome for Testing 157.0.8103.38 锁定版本；大文件下载走本机 10808 代理
+
+# 渲染后端：obscura（默认）/ chrome（降级后端）/ auto（Obscura 启动失败自动降级 Chrome）
+browser_backend: obscura
+obscura_bin: "./bin/obscura/obscura.exe"
+chrome_bin: "./bin/chrome/chrome-win64/chrome.exe"
+max_session: 1
+max_body_size: 2097152
+stealth: true
+# robots.txt 由 internal/policy.Robots 在爬虫层判定（不依赖 Obscura --obey-robots，
+# 该参数官方说明仅作用于 fetch/scrape，对 serve/CDP 模式无效）
+obey_robots: false
+keep_session_dir: false
+
+# goproxy 上游代理：外网走本机 10808，内网/回环自动直连；设为空则全部直连。
+# 注意：10808 是本机代理，换机器必须改成实际可用的代理地址或置空，否则外网请求会连不上
+upstream_proxy: "http://127.0.0.1:10808"
+
+crawl:
+  depth: 2
+  # 作用域档位：fqdn（精确主机）| rdn（根域+子域，katana 默认语义）|
+  # dnk（域名关键字）| regex（自定义正则，用 scope_value）| all（不限域）
+  # 空 = legacy（由 scope 字符串推导）。双层生效：导航入队 + 交付物
+  # （discovered/requests/report）默认过滤域外；traffic.jsonl 全量录制
+  # 并附 in_scope 标记（录制不丢数据）
+  scope_mode: ""
+  # dnk 的关键字 / regex 的正则；fqdn/rdn 留空自动用 seed 主机
+  scope_value: ""
+  # 留空 = 运行时自动锁定为 seed 主机（防止外链越界）；跨站需显式 --scope any 或列举域名
+  scope: ""
+  js_extract: true
+  skip_static_body: true
+  settle_ms: 600
+  max_pages: 0        # 0 = 不限；单个任务最多导航多少页
+  rate_per_sec: 0     # 0 = 不限速；每秒最多导航次数
+  # crawlergo 式表单自动填充与提交：常见字段名/类型用测试字典填值并触发提交，
+  # 提交产生的 GET/POST 由 goproxy 完整录制（hidden 字段不覆盖以保护 CSRF token）
+  form_submit: true
+  # 危险操作防护（默认开）：登出/改密码/删除类 URL 与表单不真实触发，
+  # 发现不受损（仍进 discovered，source=url-skipped/form-skipped）。
+  # 判定实现来自公共工具包 github.com/winezer0/basecrawler/safety，
+  # 与 assetcrawler 共用同一份词表（本项目不再维护副本）。
+  # 误伤真实路径时修正内置词表或 CLI --no-safety 临时关闭并在报告注明
+  safety: true
+  # 追加危险正则（对内置词表叠加）：URL 匹配原始链接串；表单匹配
+  # action+字段名联合串（改密码表单 action 可能只是 /account，看字段语义）
+  # safety_url_skip: []
+  # safety_form_skip: []
+  # 动态路径段泛化去重（requestfilter）：路径位置累计 ≥N 个不同值即折叠为模式，
+  # 同模式变体不再导航；防 /users/123、/users/456 式无限膨胀。0 = 禁用
+  url_pattern_threshold: 10
+  # 导航失败或 429/503 的重试次数（指数退避 + jitter）
+  nav_retries: 0
+  # 每主机每秒最多导航次数（与全局限速叠加）。0 = 不限
+  host_rate_per_sec: 0
+  # 静态认证头文件（每行 Header-Name: value，如 Cookie: session=xxx）
+  auth_file: ""
+  # 真实凭据 user:pass（存在时优先于表单测试字典填充登录表单）
+  credentials: ""
+  # 每页交互点击上限（katana -interactive 简化版）：触发 onclick/fetch 隐藏接口。
+  # 0 = 禁用；对 SPA/按钮驱动的站点建议 5-10
+  max_interactions: 0
+
+mitm:
+  ca_crt: "./assets/ca/ca.crt"
+  ca_key: "./assets/ca/ca.key"
+  # false = SSL_CERT_FILE 只放自签 CA（全量 MITM，最稳）
+  # true  = 额外合并 public_roots_file 指定的 PEM 公共根合集（必须显式给文件，不能为空）
+  merge_public_roots: false
+  public_roots_file: ""
+  per_session_ca: false    # true = 每会话生成独立临时 CA，会话结束删除私钥
+  tls_passthrough: []      # 不解密、直接隧道的域名，支持 *.example.com
+                           # 注意：隧道内是真实证书，必须同时开启 merge_public_roots + public_roots_file
+                           # （仅 Chrome 后端例外：它用 --ignore-certificate-errors）
+
+env:
+  OBSCURA_ALLOW_PRIVATE_NETWORK: "1"
+  OBSCURA_NAV_TIMEOUT_MS: "60000"
+
+output:
+  traffic: "./out/traffic.jsonl"
+  discovered: "./out/discovered.jsonl"
+  har: ""
+  # 可重放的原始 HTTP 请求包文本（每条一个标准报文，可直接粘进 Burp Repeater）
+  requests: ""
+  # 端点形状分组报告（crawl-report.json）：方法+路径+参数形状+状态分布+计数
+  report: ""
+  # 形状去重的精简请求包（每端点+参数形状一条，与全量 requests 互补交付）
+  requests_filtered: ""
+  # 非空时原始 .js 响应落盘到该目录（文件名 = URL hash），供人工溯源
+  save_js_dir: ""
+  raw_dump: false     # true = JSONL 附带原始请求/响应「头部」报文（绝不读 body）
+
+timeout:
+  cdp_ready_ms: 30000
+  navigation_ms: 45000
+  shutdown_ms: 8000
+  task_ms: 600000
+
+pool:
+  health_interval_ms: 3000
+  reuse_limit: 0      # 会话复用 N 次后强制重建，0 = 不限
+  max_idle_ms: 0      # 空闲超时回收，0 = 不回收
+
+policy:
+  ip_allow: []        # CIDR 白名单，空 = 不限
+  ip_deny: []         # CIDR 黑名单，优先级高于白名单
+
+metrics:
+  enabled: false
+  file: "./work/metrics.jsonl"
