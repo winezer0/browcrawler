@@ -7,9 +7,8 @@ import (
 	"github.com/winezer0/browcrawler/internal/storage"
 )
 
-// ExtractJS 通过 basecrawler/parse 的正则模式提取绝对路径、相对路径，
-// 并将候选解析到 seed 上、透传 HTTP 方法。
-func TestExtractJSRegexMode(t *testing.T) {
+// ExtractJS uses the shared parser and preserves source and HTTP method metadata.
+func TestExtractJSParserModes(t *testing.T) {
 	bodies := []storage.JSBody{
 		{URL: "http://t.test/static/app.js", Body: []byte(
 			`fetch("/api/v1/user/list");
@@ -22,7 +21,7 @@ func TestExtractJSRegexMode(t *testing.T) {
 	byURL := map[string]Discovery{}
 	for _, d := range discs {
 		byURL[d.URL] = d
-		if !strings.HasPrefix(d.Source, "regex:") {
+		if !strings.HasPrefix(d.Source, "regex:") && !strings.HasPrefix(d.Source, "ast:") {
 			t.Fatalf("source 前缀应为 regex: %s", d.Source)
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/winezer0/basecrawler/parse"
+	parseast "github.com/winezer0/basecrawler/parse/ast"
 	"golang.org/x/net/html"
 
 	"github.com/winezer0/browcrawler/internal/storage"
@@ -13,7 +14,7 @@ import (
 // Discovery 是从页面/JS 中挖掘出的 URL 或接口。
 type Discovery struct {
 	URL    string `json:"url"`
-	Source string `json:"source"` // a@href / iframe@src / form@action / script@src / regex:js ...
+	Source string `json:"source"` // ast:... / regex:... / bundle-chunk:... / bundle-route:... / browser DOM sources
 	From   string `json:"from"`
 	Depth  int    `json:"depth"`
 	Method string `json:"method,omitempty"`
@@ -69,9 +70,8 @@ func ExtractLinks(base, doc string) []Discovery {
 	return out
 }
 
-// ExtractJS uses basecrawler/parse in JSModeRegex to extract URL candidates
-// from recorded JS response bodies, including absolute URLs, quoted paths,
-// and relative paths.
+// ExtractJS uses AST-first parsing, light static deobfuscation, and bundle
+// recovery to extract candidates from recorded JavaScript response bodies.
 func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 	baseURL, err := url.Parse(base)
 	if err != nil {
@@ -80,9 +80,32 @@ func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 	var out []Discovery
 	seen := map[string]bool{}
 	parseOptions := parse.DefaultOptions()
-	parseOptions.JSMode = parse.JSModeRegex
+	parseOptions.JSMode = parse.JSModeAST
+	parseOptions.Deobf = parse.DeobfLight
 	for _, jb := range jsBodies {
-		for _, req := range parse.ParseJS(jb.Body, parseOptions) {
+		var bundle parse.BundleResult
+		if parse.LooksLikeBundle(jb.Body) {
+			bundle = parse.ParseBundle(jb.Body, parse.Options{ChunkRecover: true})
+		}
+		bundleRouteURLs := make(map[string]struct{}, len(bundle.Routes))
+		for _, route := range bundle.Routes {
+			if abs := resolve(baseURL, route.Path); abs != "" {
+				bundleRouteURLs[abs] = struct{}{}
+			}
+		}
+
+		astUsed := false
+		parseOptions.JSExtract = func(src string) ([]parse.Request, bool) {
+			reqs, ok := parseast.Auto(src)
+			astUsed = ok
+			return reqs, ok
+		}
+		reqs := parse.ParseJS(jb.Body, parseOptions)
+		mode := "regex"
+		if astUsed {
+			mode = "ast"
+		}
+		for _, req := range reqs {
 			raw := strings.TrimSpace(req.Raw)
 			if raw == "" || strings.ContainsAny(raw, "${}\n") {
 				continue
@@ -91,18 +114,80 @@ func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 				continue // 占位符路径不可直接访问
 			}
 			abs := resolve(baseURL, raw)
-			if abs == "" || seen[abs] {
+			if abs == "" || !isNavigable(abs) {
 				continue
 			}
-			seen[abs] = true
-			src := "regex"
-			if req.Source != "" {
-				src = "regex:" + req.Source
+			if _, isBundleRoute := bundleRouteURLs[abs]; isBundleRoute {
+				continue
 			}
-			out = append(out, Discovery{URL: abs, Source: src, From: jb.URL, Method: req.Method})
+			addJSDiscovery(&out, seen, baseURL, raw, jsSource(mode, req.Source), jb.URL, req.Method)
+		}
+
+		scriptBase := scriptBaseURL(baseURL, jb.URL)
+		for _, chunk := range bundle.Chunks {
+			addJSDiscovery(&out, seen, scriptBase, chunk.Path,
+				jsSource("bundle-chunk", chunk.Source), jb.URL, "")
+		}
+		for _, route := range bundle.Routes {
+			addJSDiscovery(&out, seen, baseURL, route.Path,
+				jsSource("bundle-route", route.Source), jb.URL, route.Method)
 		}
 	}
 	return out
+}
+
+func addJSDiscovery(out *[]Discovery, seen map[string]bool, baseURL *url.URL, raw, source, from, method string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.ContainsAny(raw, "${}\n") {
+		return
+	}
+	abs := resolve(baseURL, raw)
+	if abs == "" || seen[abs] {
+		return
+	}
+	seen[abs] = true
+	*out = append(*out, Discovery{URL: abs, Source: source, From: from, Method: method})
+}
+
+func jsSource(mode, detail string) string {
+	if detail == "" {
+		return mode + ":unknown"
+	}
+	return mode + ":" + detail
+}
+
+func scriptBaseURL(pageURL *url.URL, script string) *url.URL {
+	if script == "" {
+		return pageURL
+	}
+	u, err := url.Parse(script)
+	if err != nil {
+		return pageURL
+	}
+	return pageURL.ResolveReference(u)
+}
+
+func dropBrowserKnownBundleRoutes(discoveries, links []Discovery, seen map[string]bool) []Discovery {
+	known := make(map[string]struct{}, len(seen)+len(links))
+	for key, value := range seen {
+		if value {
+			known[key] = struct{}{}
+		}
+	}
+	for _, link := range links {
+		known[normalize(link.URL)] = struct{}{}
+	}
+
+	filtered := discoveries[:0]
+	for _, discovery := range discoveries {
+		if strings.HasPrefix(discovery.Source, "bundle-route:") {
+			if _, exists := known[normalize(discovery.URL)]; exists {
+				continue
+			}
+		}
+		filtered = append(filtered, discovery)
+	}
+	return filtered
 }
 
 func attrMap(n *html.Node) map[string]string {

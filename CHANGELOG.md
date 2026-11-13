@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 ### 变更
-- JS 接口发现来源标记按解析策略记录；当前使用正则模式，前缀为 `regex:*`。
+- JS 静态分析启用 AST 优先解析、轻量反混淆和 bundle chunk/路由恢复；来源保留实际解析路径（`ast:*`、`regex:*`、`bundle-chunk:*`、`bundle-route:*`）。
 - safety 危险操作防护改为直接调用公共工具包
   `github.com/winezer0/basecrawler/safety`：删除 `internal/crawl/safety.go`
   的重复词表与判定实现，`crawler.go` / `forms.go` 直接 import 并使用

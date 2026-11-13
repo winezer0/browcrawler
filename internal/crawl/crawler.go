@@ -253,7 +253,7 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 			st.Discovered += c.collectRuntimeRoutes(ctx, it, seen, &queue)
 		}
 		if c.cfg.Crawl.JSExtract {
-			jsLinks = ExtractJS(c.rec.TakeJS(), it.URL)
+			jsLinks = dropBrowserKnownBundleRoutes(ExtractJS(c.rec.TakeJS(), it.URL), links, seen)
 			st.JSLinks += len(jsLinks)
 		}
 		for _, d := range append(links, jsLinks...) {

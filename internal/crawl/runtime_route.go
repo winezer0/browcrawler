@@ -99,10 +99,10 @@ func (c *Crawler) collectRuntimeRoutes(ctx context.Context, it item, seen map[st
 			return count
 		}
 		count++
+		seen[normalize(d.URL)] = true
 		// 与 links 入队同规则：深度闸门内才回灌（discovered 始终记录）
 		if isNavigable(d.URL) && it.Depth < c.cfg.Crawl.Depth {
 			*queue = append(*queue, item{URL: d.URL, Depth: it.Depth + 1})
-			seen[normalize(d.URL)] = true
 		}
 	}
 	if count > 0 {
