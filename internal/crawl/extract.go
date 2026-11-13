@@ -69,10 +69,9 @@ func ExtractLinks(base, doc string) []Discovery {
 	return out
 }
 
-// ExtractJS 用 basecrawler 的 pkg/parse解析录制到的 JS 响应体，
-// 提取其中的接口 URL 候选（正则档：绝对 URL / 引号路径 / 相对路径三类，
-// 包内自带噪声过滤、静态资源过滤、模板占位跳过与去重）。
-// AST 引擎（jsext）注入为后续升级路径，当前正则档已覆盖主要字面量场景。
+// ExtractJS uses basecrawler/parse to extract URL candidates from recorded JS
+// response bodies. The default parse options keep extraction static and cover
+// absolute URLs, quoted paths, and relative paths.
 func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 	baseURL, err := url.Parse(base)
 	if err != nil {
@@ -80,8 +79,9 @@ func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 	}
 	var out []Discovery
 	seen := map[string]bool{}
+	parseOptions := parse.DefaultOptions()
 	for _, jb := range jsBodies {
-		for _, req := range parse.ParseJS(jb.Body, parse.DefaultOptions()) {
+		for _, req := range parse.ParseJS(jb.Body, parseOptions) {
 			raw := strings.TrimSpace(req.Raw)
 			if raw == "" || strings.ContainsAny(raw, "${}\n") {
 				continue

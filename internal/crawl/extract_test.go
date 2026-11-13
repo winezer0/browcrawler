@@ -7,9 +7,9 @@ import (
 	"github.com/winezer0/browcrawler/internal/storage"
 )
 
-// ExtractJS 换用 basecrawler/pkg/parse（jsext）后的行为锚点：
-// 绝对路径/相对路径提取 + 相对 seed 解析 + Method 透传。
-func TestExtractJSWithAssetExtractor(t *testing.T) {
+// ExtractJS 通过 basecrawler/parse 提取绝对路径、相对路径，
+// 并将候选解析到 seed 上、透传 HTTP 方法。
+func TestExtractJSWithBasecrawlerParse(t *testing.T) {
 	bodies := []storage.JSBody{
 		{URL: "http://t.test/static/app.js", Body: []byte(
 			`fetch("/api/v1/user/list");

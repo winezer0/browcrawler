@@ -95,7 +95,7 @@ func New(o Options) (*Crawler, error) {
 	}
 	// 直接使用公共工具包 github.com/winezer0/basecrawler/safety，
 	// 与 basecrawler 共用同一份词表与判定逻辑（本项目不再维护副本）。
-	safetyFn, err := safety.NewSafety(o.Cfg.Crawl.Safety,
+	safetyFilter, err := safety.NewSafety(o.Cfg.Crawl.Safety,
 		o.Cfg.Crawl.SafetyURLSkip, o.Cfg.Crawl.SafetyFormSkip)
 	if err != nil {
 		_ = f.Close()
@@ -103,7 +103,7 @@ func New(o Options) (*Crawler, error) {
 	}
 	return &Crawler{
 		cfg: o.Cfg, driver: o.Driver, rec: o.Rec, logger: o.Logger,
-		outFile: f, enc: json.NewEncoder(f), scope: scopeFn, safetyFilter: safetyFn,
+		outFile: f, enc: json.NewEncoder(f), scope: scopeFn, safetyFilter: safetyFilter,
 		wsURLs:  map[string]string{},
 		limiter: o.Limiter, robots: o.Robots, dedup: o.Dedup, credentials: o.Credentials,
 		checkpointPath: o.CheckpointPath, resume: o.Resume, metrics: m,

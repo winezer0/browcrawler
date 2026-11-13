@@ -63,7 +63,7 @@ type CrawlConfig struct {
 	// 交付物（discovered/requests/report）默认过滤域外，JSONL 附 InScope 标记。
 	ScopeMode      string  `yaml:"scope_mode"`
 	ScopeValue     string  `yaml:"scope_value"` // dnk: 关键字；regex: 正则；fqdn/rdn 留空用 seed 主机
-	JSExtract      bool    `yaml:"js_extract"`  // JS 接口提取（basecrawler/pkg/parse 响应处理包）
+	JSExtract      bool    `yaml:"js_extract"`  // JS 接口提取（basecrawler/parse）
 	SkipStaticBody bool    `yaml:"skip_static_body"`
 	SettleMS       int     `yaml:"settle_ms"`
 	MaxPages       int     `yaml:"max_pages"`    // 0 = 不限
