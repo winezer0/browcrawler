@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### 变更
+- discovered 按 URL、方法、来源、父页面/脚本去重，保留同目标的多条证据；已知路由也保留静态与各框架运行时来源。
+- 修复运行时路由入队时提前标为已访问导致跳过导航，以及表单发现覆盖交互后链接的问题。
 - JS 静态分析启用 AST 优先解析、轻量反混淆和 bundle chunk/路由恢复；来源区分 `ast:goja`、`ast:treesitter`、`regex:*`、`bundle-chunk:*` 与 `bundle-route:*`。
 - safety 危险操作防护改为直接调用公共工具包
   `github.com/winezer0/basecrawler/safety`：删除 `internal/crawl/safety.go`

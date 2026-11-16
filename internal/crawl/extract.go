@@ -50,10 +50,11 @@ func ExtractLinks(base, doc string) []Discovery {
 						continue
 					}
 					abs := resolve(baseURL, raw)
-					if abs == "" || seen[abs] {
+					key := strings.Join([]string{abs, r.src, strings.ToUpper(attrs["method"])}, "\x00")
+					if abs == "" || seen[key] {
 						continue
 					}
-					seen[abs] = true
+					seen[key] = true
 					d := Discovery{URL: abs, Source: r.src, From: base}
 					if r.tag == "form" {
 						d.Method = strings.ToUpper(defaultStr(attrs["method"], "GET"))
@@ -165,10 +166,11 @@ func addJSDiscovery(out *[]Discovery, seen map[string]bool, baseURL *url.URL, ra
 		return
 	}
 	abs := resolve(baseURL, raw)
-	if abs == "" || seen[abs] {
+	key := strings.Join([]string{abs, source, from, method}, "\x00")
+	if abs == "" || seen[key] {
 		return
 	}
-	seen[abs] = true
+	seen[key] = true
 	*out = append(*out, Discovery{URL: abs, Source: source, From: from, Method: method})
 }
 
@@ -188,29 +190,6 @@ func scriptBaseURL(pageURL *url.URL, script string) *url.URL {
 		return pageURL
 	}
 	return pageURL.ResolveReference(u)
-}
-
-func dropBrowserKnownBundleRoutes(discoveries, links []Discovery, seen map[string]bool) []Discovery {
-	known := make(map[string]struct{}, len(seen)+len(links))
-	for key, value := range seen {
-		if value {
-			known[key] = struct{}{}
-		}
-	}
-	for _, link := range links {
-		known[normalize(link.URL)] = struct{}{}
-	}
-
-	filtered := discoveries[:0]
-	for _, discovery := range discoveries {
-		if strings.HasPrefix(discovery.Source, "bundle-route:") {
-			if _, exists := known[normalize(discovery.URL)]; exists {
-				continue
-			}
-		}
-		filtered = append(filtered, discovery)
-	}
-	return filtered
 }
 
 func attrMap(n *html.Node) map[string]string {

@@ -47,6 +47,7 @@ type Crawler struct {
 	rec            *storage.Recorder
 	logger         *log.Logger
 	enc            *json.Encoder
+	discoverySeen  map[string]bool
 	outFile        *os.File
 	scope          func(string) bool
 	safetyFilter   *safety.Safety
@@ -266,7 +267,7 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 		}
 		if c.cfg.Crawl.JSExtract {
 			analysis := extractJSWithChunks(ctx, c.driver, c.rec.TakeJS(), it.URL, bundleChunkOptionsFromConfig(c.cfg))
-			jsLinks = dropBrowserKnownBundleRoutes(analysis.Discoveries, links, seen)
+			jsLinks = analysis.Discoveries // preserve static evidence even for browser-known routes
 			st.BundleChunksFetched += analysis.FetchedChunks
 			st.BundleTruncated += analysis.TruncatedBundles + analysis.TruncatedChunkBodies
 			st.BundleChunkFetchErrors += analysis.ChunkFetchErrors
@@ -295,10 +296,11 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 			if d.From == "" {
 				d.From = it.URL
 			}
-			if err := c.enc.Encode(d); err != nil {
+			n, err := c.writeDiscovery(d)
+			if err != nil {
 				return st, err
 			}
-			st.Discovered++
+			st.Discovered += n
 		}
 		var formRecords, postLinks []Discovery
 		if c.cfg.Crawl.MaxInteractions > 0 {
@@ -324,12 +326,14 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 		}
 		if c.cfg.Crawl.FormSubmit {
 			if fs, ok := c.driver.(FormSubmitter); ok {
-				formRecords, postLinks = SubmitPageForms(ctx, fs, it.URL,
+				var formLinks []Discovery
+				formRecords, formLinks = SubmitPageForms(ctx, fs, it.URL,
 					time.Duration(c.cfg.Crawl.SettleMS)*time.Millisecond, c.credentials, c.safetyFilter, c.logger)
+				postLinks = append(postLinks, formLinks...)
 				c.metrics.Inc("crawl.forms_submitted", int64(len(formRecords)))
 			}
 		}
-		for _, d := range formRecords {
+		for _, d := range append(formRecords, postLinks...) {
 			// 双层生效·输出层：表单记录同样只留域内（提交产生的导航本身
 			// 受导航层 scope 约束，此处过滤的是跨域 action 端点的展示）。
 			du, derr := url.Parse(d.URL)
@@ -337,10 +341,11 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 				continue
 			}
 			d.Depth = it.Depth + 1
-			if err := c.enc.Encode(d); err != nil {
+			n, err := c.writeDiscovery(d)
+			if err != nil {
 				return st, err
 			}
-			st.Discovered++
+			st.Discovered += n
 		}
 		if it.Depth >= c.cfg.Crawl.Depth {
 			continue
@@ -360,10 +365,11 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 			if c.safetyFilter.SkipURL(d.URL) {
 				d.Depth = it.Depth + 1
 				d.Source = "url-skipped"
-				if err := c.enc.Encode(d); err != nil {
+				n, err := c.writeDiscovery(d)
+				if err != nil {
 					return st, err
 				}
-				st.Discovered++
+				st.Discovered += n
 				c.metrics.Inc("crawl.safety_url_skipped", 1)
 				continue
 			}

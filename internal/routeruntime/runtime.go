@@ -63,10 +63,11 @@ func Collect(eval evalJS) []Route {
 			if path == "" || !strings.HasPrefix(path, "/") {
 				continue // 探针只报站内路径，绝对 URL 由通用提取层负责
 			}
-			if seen[path] {
+			key := p.Name + "\x00" + path
+			if seen[key] {
 				continue
 			}
-			seen[path] = true
+			seen[key] = true
 			out = append(out, Route{URL: path, Framework: p.Name})
 		}
 	}

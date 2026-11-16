@@ -62,12 +62,4 @@ func TestExtractJSRecoversBundleChunksAndRoutes(t *testing.T) {
 		t.Fatalf("missing recovered bundle chunk or route (chunk=%t route=%t): %+v", gotChunk, gotRoute, discoveries)
 	}
 
-	known := map[string]bool{normalize("http://t.test/admin/users/:id"): true}
-	filtered := dropBrowserKnownBundleRoutes(discoveries, nil, known)
-	for _, discovery := range filtered {
-		if discovery.URL == "http://t.test/admin/users/:id" &&
-			strings.HasPrefix(discovery.Source, "bundle-route:") {
-			t.Fatal("bundle route already discovered by the browser should be suppressed")
-		}
-	}
 }

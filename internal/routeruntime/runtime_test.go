@@ -1,18 +1,16 @@
 package routeruntime
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 )
 
 // Collect 解析与去重：mock eval 返回各框架路径，验证排序稳定、
-// 非站内路径过滤、跨框架去重。
+// 非站内路径过滤、同框架去重并保留跨框架证据。
 func TestCollectParsesAndDedupes(t *testing.T) {
 	responses := map[string]string{
-		"vue":   `["/dashboard","/users/1"]`,
-		"next":  `["/dashboard","/settings"]`, // /dashboard 跨框架重复
-		"next2": `[["bad"]]`,
+		"vue":  `["/dashboard","/dashboard","/users/1","relative"]`,
+		"next": `["/dashboard","/settings"]`, // /dashboard 跨框架重复
 	}
 	count := 0
 	eval := func(expr string) (string, error) {
@@ -20,34 +18,29 @@ func TestCollectParsesAndDedupes(t *testing.T) {
 		if count < len(All()) {
 			p := All()[count]
 			count++
-			if v, ok := responses[p.Name+string(rune(count))]; ok {
+			if v, ok := responses[p.Name]; ok {
 				return v, nil
-			}
-			for k, v := range responses {
-				if strings.HasPrefix(k, p.Name) {
-					return v, nil
-				}
 			}
 		}
 		return `[]`, nil
 	}
 	routes := Collect(eval)
-	seen := map[string]string{}
+	seen := map[string]bool{}
 	for _, r := range routes {
-		if prev, ok := seen[r.URL]; ok && prev != r.Framework {
-			t.Fatalf("跨框架去重失败: %s 同时来自 %s/%s", r.URL, prev, r.Framework)
+		key := r.Framework + ":" + r.URL
+		if seen[key] {
+			t.Fatalf("重复来源证据: %s", key)
 		}
-		seen[r.URL] = r.Framework
+		seen[key] = true
 	}
-	if _, ok := seen["/dashboard"]; !ok {
-		t.Fatal("应包含 /dashboard")
+	if !seen["vue:/dashboard"] || !seen["next:/dashboard"] || len(routes) != 4 {
+		t.Fatalf("来源丢失: %+v", routes)
 	}
 	for _, r := range routes {
 		if !strings.HasPrefix(r.URL, "/") {
 			t.Fatalf("非站内路径泄漏: %s", r.URL)
 		}
 	}
-	_ = json.Marshal
 }
 
 // 全部探针 JS 必须是函数定义（rod Eval 以 (fn).apply 调用）且自带 try/catch。

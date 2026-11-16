@@ -47,8 +47,7 @@ func InjectRuntimeRouteHook(ctx context.Context, d PageDriver) {
 	}
 }
 
-// CollectRuntimeRoutes 跑全部框架探针，返回 scope 内且未见过的新路由
-// （绝对 URL）。seen 即 BFS 的去重集合，由调用方持有。
+// CollectRuntimeRoutes 返回 scope 内的路由证据。导航是否已见不影响来源保留。
 func CollectRuntimeRoutes(ctx context.Context, d PageDriver, pageURL string,
 	scope func(string) bool, seen map[string]bool, m metrics.Recorder) []Discovery {
 
@@ -72,9 +71,6 @@ func CollectRuntimeRoutes(ctx context.Context, d PageDriver, pageURL string,
 		if perr != nil || !scope(u.Hostname()) {
 			continue
 		}
-		if seen[normalize(full)] {
-			continue
-		}
 		out = append(out, Discovery{
 			URL:    full,
 			Source: "runtime-route:" + r.Framework,
@@ -94,14 +90,14 @@ func (c *Crawler) collectRuntimeRoutes(ctx context.Context, it item, seen map[st
 	count := 0
 	for _, d := range routes {
 		d.Depth = it.Depth + 1
-		if err := c.enc.Encode(d); err != nil {
+		n, err := c.writeDiscovery(d)
+		if err != nil {
 			c.logger.Printf("[crawl] runtime-route encode: %v", err)
 			return count
 		}
-		count++
-		seen[normalize(d.URL)] = true
+		count += n
 		// 与 links 入队同规则：深度闸门内才回灌（discovered 始终记录）
-		if isNavigable(d.URL) && it.Depth < c.cfg.Crawl.Depth {
+		if !seen[normalize(d.URL)] && isNavigable(d.URL) && it.Depth < c.cfg.Crawl.Depth {
 			*queue = append(*queue, item{URL: d.URL, Depth: it.Depth + 1})
 		}
 	}
