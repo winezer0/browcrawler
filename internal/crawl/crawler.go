@@ -24,13 +24,15 @@ import (
 )
 
 type Stats struct {
-	Pages      int           `json:"pages"`
-	Failed     int           `json:"failed"`
-	Discovered int           `json:"discovered"`
-	JSLinks    int           `json:"js_links"`
-	Records    int64         `json:"traffic_records"`
-	ElapsedMS  int64         `json:"elapsed_ms"`
-	Elapsed    time.Duration `json:"-"`
+	Pages               int           `json:"pages"`
+	Failed              int           `json:"failed"`
+	Discovered          int           `json:"discovered"`
+	JSLinks             int           `json:"js_links"`
+	BundleChunksFetched int64         `json:"bundle_chunks_fetched"`
+	BundleTruncated     int64         `json:"bundle_truncated"`
+	Records             int64         `json:"traffic_records"`
+	ElapsedMS           int64         `json:"elapsed_ms"`
+	Elapsed             time.Duration `json:"-"`
 }
 
 type item struct {
@@ -253,7 +255,22 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 			st.Discovered += c.collectRuntimeRoutes(ctx, it, seen, &queue)
 		}
 		if c.cfg.Crawl.JSExtract {
-			jsLinks = dropBrowserKnownBundleRoutes(ExtractJS(c.rec.TakeJS(), it.URL), links, seen)
+			analysis := extractJSWithChunks(ctx, c.driver, c.rec.TakeJS(), it.URL)
+			jsLinks = dropBrowserKnownBundleRoutes(analysis.Discoveries, links, seen)
+			st.BundleChunksFetched += analysis.FetchedChunks
+			st.BundleTruncated += analysis.TruncatedBundles + analysis.TruncatedChunkBodies
+			if analysis.FetchedChunks > 0 {
+				c.metrics.Inc("crawl.bundle_chunks_fetched", analysis.FetchedChunks)
+			}
+			if analysis.TruncatedBundles > 0 {
+				c.metrics.Inc("crawl.bundle_parse_truncated", analysis.TruncatedBundles)
+			}
+			if analysis.TruncatedChunkBodies > 0 {
+				c.metrics.Inc("crawl.bundle_chunk_truncated", analysis.TruncatedChunkBodies)
+			}
+			if analysis.ChunkFetchErrors > 0 {
+				c.metrics.Inc("crawl.bundle_chunk_fetch_errors", analysis.ChunkFetchErrors)
+			}
 			st.JSLinks += len(jsLinks)
 		}
 		for _, d := range append(links, jsLinks...) {
@@ -264,7 +281,9 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 				continue
 			}
 			d.Depth = it.Depth + 1
-			d.From = it.URL
+			if d.From == "" {
+				d.From = it.URL
+			}
 			if err := c.enc.Encode(d); err != nil {
 				return st, err
 			}
@@ -398,6 +417,6 @@ func isNavigable(raw string) bool {
 }
 
 func (s Stats) String() string {
-	return fmt.Sprintf("pages=%d failed=%d discovered=%d js_links=%d traffic=%d elapsed=%dms",
-		s.Pages, s.Failed, s.Discovered, s.JSLinks, s.Records, s.ElapsedMS)
+	return fmt.Sprintf("pages=%d failed=%d discovered=%d js_links=%d chunks=%d bundle_truncated=%d traffic=%d elapsed=%dms",
+		s.Pages, s.Failed, s.Discovered, s.JSLinks, s.BundleChunksFetched, s.BundleTruncated, s.Records, s.ElapsedMS)
 }

@@ -73,19 +73,32 @@ func ExtractLinks(base, doc string) []Discovery {
 // ExtractJS uses AST-first parsing, light static deobfuscation, and bundle
 // recovery to extract candidates from recorded JavaScript response bodies.
 func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
+	return extractJS(jsBodies, base, nil).Discoveries
+}
+
+func extractJS(jsBodies []storage.JSBody, base string, depths map[string]int) jsExtractionResult {
 	baseURL, err := url.Parse(base)
 	if err != nil {
-		return nil
+		return jsExtractionResult{}
 	}
-	var out []Discovery
+	result := jsExtractionResult{}
 	seen := map[string]bool{}
+	chunkSeen := map[string]struct{}{}
 	parseOptions := parse.DefaultOptions()
 	parseOptions.JSMode = parse.JSModeAST
-	parseOptions.Deobf = parse.DeobfLight
+	parseOptions.Deobf = parse.DeobfOff // each body is recovered once before both parse paths
 	for _, jb := range jsBodies {
+		depth := depths[chunkURLKey(jb.URL)]
+		bundleSource := jb.Body
+		if recovered, changed := parse.Recover(string(jb.Body)); changed {
+			bundleSource = []byte(recovered)
+		}
 		var bundle parse.BundleResult
-		if parse.LooksLikeBundle(jb.Body) {
-			bundle = parse.ParseBundle(jb.Body, parse.Options{ChunkRecover: true})
+		if parse.LooksLikeBundle(bundleSource) {
+			bundle = parse.ParseBundle(bundleSource, parse.Options{ChunkRecover: true})
+		}
+		if bundle.Truncated {
+			result.TruncatedBundles++
 		}
 		bundleRouteURLs := make(map[string]struct{}, len(bundle.Routes))
 		for _, route := range bundle.Routes {
@@ -100,7 +113,7 @@ func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 			astUsed = ok
 			return reqs, ok
 		}
-		reqs := parse.ParseJS(jb.Body, parseOptions)
+		reqs := parse.ParseJS(bundleSource, parseOptions)
 		mode := "regex"
 		if astUsed {
 			mode = "ast"
@@ -120,20 +133,30 @@ func ExtractJS(jsBodies []storage.JSBody, base string) []Discovery {
 			if _, isBundleRoute := bundleRouteURLs[abs]; isBundleRoute {
 				continue
 			}
-			addJSDiscovery(&out, seen, baseURL, raw, jsSource(mode, req.Source), jb.URL, req.Method)
+			addJSDiscovery(&result.Discoveries, seen, baseURL, raw, jsSource(mode, req.Source), jb.URL, req.Method)
 		}
 
 		scriptBase := scriptBaseURL(baseURL, jb.URL)
 		for _, chunk := range bundle.Chunks {
-			addJSDiscovery(&out, seen, scriptBase, chunk.Path,
+			chunkURL := resolve(scriptBase, chunk.Path)
+			if chunkURL != "" && isJavaScriptBundleChunk(chunkURL) {
+				key := chunkURLKey(chunkURL)
+				if _, duplicate := chunkSeen[key]; !duplicate {
+					chunkSeen[key] = struct{}{}
+					result.Chunks = append(result.Chunks, bundleChunkCandidate{
+						URL: chunkURL, Depth: depth + 1,
+					})
+				}
+			}
+			addJSDiscovery(&result.Discoveries, seen, scriptBase, chunk.Path,
 				jsSource("bundle-chunk", chunk.Source), jb.URL, "")
 		}
 		for _, route := range bundle.Routes {
-			addJSDiscovery(&out, seen, baseURL, route.Path,
+			addJSDiscovery(&result.Discoveries, seen, baseURL, route.Path,
 				jsSource("bundle-route", route.Source), jb.URL, route.Method)
 		}
 	}
-	return out
+	return result
 }
 
 func addJSDiscovery(out *[]Discovery, seen map[string]bool, baseURL *url.URL, raw, source, from, method string) {
