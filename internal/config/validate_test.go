@@ -16,7 +16,7 @@ func TestDefaultIsValid(t *testing.T) {
 func TestDefaultJSChunkBudgets(t *testing.T) {
 	chunks := Default().Crawl.JSChunks
 	if !chunks.Enabled || chunks.MaxDepth != 2 || chunks.MaxCount != 16 ||
-		chunks.MaxChunkBytes != 2<<20 || chunks.MaxTotalBytes != 8<<20 {
+		chunks.MaxChunkBytes != 2<<20 || chunks.MaxTotalBytes != 8<<20 || chunks.FetchTimeoutMS != 15000 {
 		t.Fatalf("unexpected JS chunk defaults: %+v", chunks)
 	}
 }
@@ -52,6 +52,10 @@ func TestValidateNoSilentPhantoms(t *testing.T) {
 		{"zero enabled js chunk count", func(c *Config) { c.Crawl.JSChunks.MaxCount = 0 }},
 		{"js chunk bytes above hard limit", func(c *Config) { c.Crawl.JSChunks.MaxChunkBytes = maxJSChunkBytes + 1 }},
 		{"js total smaller than per chunk", func(c *Config) { c.Crawl.JSChunks.MaxTotalBytes = c.Crawl.JSChunks.MaxChunkBytes - 1 }},
+		{"negative js chunk timeout", func(c *Config) { c.Crawl.JSChunks.FetchTimeoutMS = -1 }},
+		{"js chunk timeout above hard limit", func(c *Config) { c.Crawl.JSChunks.FetchTimeoutMS = maxJSChunkTimeoutMS + 1 }},
+		{"zero enabled js chunk timeout", func(c *Config) { c.Crawl.JSChunks.FetchTimeoutMS = 0 }},
+		{"js chunk timeout reaches browser evaluation timeout", func(c *Config) { c.Crawl.JSChunks.FetchTimeoutMS = c.Timeout.NavigationMS }},
 		{"negative rate", func(c *Config) { c.Crawl.RatePerSec = -1 }},
 		{"zero navigation timeout", func(c *Config) { c.Timeout.NavigationMS = 0 }},
 		{"zero health interval", func(c *Config) { c.Pool.HealthIntervalMS = 0 }},
@@ -79,6 +83,7 @@ func TestLoadJSChunkConfig(t *testing.T) {
     max_count: 24
     max_chunk_bytes: 1048576
     max_total_bytes: 4194304
+    fetch_timeout_ms: 9000
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
@@ -87,9 +92,26 @@ func TestLoadJSChunkConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := JSChunksConfig{Enabled: false, MaxDepth: 3, MaxCount: 24, MaxChunkBytes: 1 << 20, MaxTotalBytes: 4 << 20}
+	want := JSChunksConfig{
+		Enabled: false, MaxDepth: 3, MaxCount: 24,
+		MaxChunkBytes: 1 << 20, MaxTotalBytes: 4 << 20, FetchTimeoutMS: 9000,
+	}
 	if cfg.Crawl.JSChunks != want {
 		t.Fatalf("loaded JS chunk config = %+v, want %+v", cfg.Crawl.JSChunks, want)
+	}
+}
+
+func TestExampleConfigUsesValidatedJSChunkDefaults(t *testing.T) {
+	cfg, err := Load(filepath.Join("..", "..", "config.example.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := JSChunksConfig{
+		Enabled: true, MaxDepth: 2, MaxCount: 16,
+		MaxChunkBytes: 2 << 20, MaxTotalBytes: 8 << 20, FetchTimeoutMS: 15000,
+	}
+	if cfg.Crawl.JSChunks != want {
+		t.Fatalf("example JS chunk config = %+v, want %+v", cfg.Crawl.JSChunks, want)
 	}
 }
 

@@ -16,8 +16,10 @@ import (
 )
 
 type httpBackedPageEvaluator struct {
-	client *http.Client
-	urls   []string
+	client   *http.Client
+	urls     []string
+	limits   []int64
+	timeouts []int
 }
 
 func (e *httpBackedPageEvaluator) Eval(ctx context.Context, expression string) (string, error) {
@@ -46,9 +48,24 @@ func (e *httpBackedPageEvaluator) Eval(ctx context.Context, expression string) (
 	if err != nil {
 		return "", err
 	}
+	const timeoutPrefix = "const timeoutMs = "
+	start = strings.Index(expression, timeoutPrefix)
+	if start < 0 {
+		return "", fmt.Errorf("fetch expression is missing timeout")
+	}
+	start += len(timeoutPrefix)
+	end = strings.IndexByte(expression[start:], ';')
+	timeout, err := strconv.Atoi(expression[start : start+end])
+	if err != nil {
+		return "", err
+	}
 	e.urls = append(e.urls, target)
-	if !strings.Contains(expression, `credentials: "same-origin"`) || !strings.Contains(expression, "reader.read()") {
-		return "", fmt.Errorf("fetch expression lost browser-session or streaming limits")
+	e.limits = append(e.limits, limit)
+	e.timeouts = append(e.timeouts, timeout)
+	if !strings.Contains(expression, `credentials: "same-origin"`) ||
+		!strings.Contains(expression, "reader.read()") ||
+		!strings.Contains(expression, "signal: controller.signal") {
+		return "", fmt.Errorf("fetch expression lost browser-session, streaming, or timeout limits")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
@@ -79,6 +96,7 @@ func testBundleChunkOptions() bundleChunkOptions {
 	return bundleChunkOptions{
 		Enabled: defaults.Enabled, MaxDepth: defaults.MaxDepth, MaxCount: defaults.MaxCount,
 		MaxChunkBytes: defaults.MaxChunkBytes, MaxTotalBytes: defaults.MaxTotalBytes,
+		FetchTimeoutMS: defaults.FetchTimeoutMS,
 	}
 }
 

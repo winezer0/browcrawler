@@ -9,54 +9,55 @@ import (
 // Overrides 是 CLI flag 的结构化投影；-1 / 空串 / false 表示「未指定」。
 // Apply 是纯函数，唯一职责是把覆盖值写进 Config，便于单元测试且不触碰运行时。
 type Overrides struct {
-	Scope                string
-	Depth                int
-	Traffic              string
-	Discovered           string
-	HAR                  string
-	Upstream             string
-	NoStealth            bool
-	ObeyRobots           bool
-	MergeRoots           bool
-	NoForms              bool
-	Requests             string
-	Report               string
-	RequestsFiltered     string
-	SaveJS               bool
-	ScopeMode            string
-	NoRuntimeRoute       bool
-	NoWSCapture          bool
-	NoSafety             bool
-	FeedPath             string
-	DeliverOutScope      bool
-	ScopeValue           string
-	Resume               bool
-	NavRetries           int
-	MaxInteractions      int
-	HostRate             float64
-	AuthFile             string
-	Creds                string
-	PerSession           bool
-	KeepDir              bool
-	SettleMS             int
-	NoJSExtract          bool
-	NoJSChunks           bool
-	JSChunkMaxDepth      *int
-	JSChunkMaxCount      *int
-	JSChunkMaxBytes      *int64
-	JSChunkMaxTotalBytes *int64
-	Backend              string
-	MaxSession           int
-	MaxPages             int
-	RatePerSec           float64
-	RawDump              bool
-	MetricsFile          string
-	RootsFile            string
-	Passthrough          string
-	IPAllow              string
-	IPDeny               string
-	Concurrency          int
-	ExtraSeeds           string
+	Scope                 string
+	Depth                 int
+	Traffic               string
+	Discovered            string
+	HAR                   string
+	Upstream              string
+	NoStealth             bool
+	ObeyRobots            bool
+	MergeRoots            bool
+	NoForms               bool
+	Requests              string
+	Report                string
+	RequestsFiltered      string
+	SaveJS                bool
+	ScopeMode             string
+	NoRuntimeRoute        bool
+	NoWSCapture           bool
+	NoSafety              bool
+	FeedPath              string
+	DeliverOutScope       bool
+	ScopeValue            string
+	Resume                bool
+	NavRetries            int
+	MaxInteractions       int
+	HostRate              float64
+	AuthFile              string
+	Creds                 string
+	PerSession            bool
+	KeepDir               bool
+	SettleMS              int
+	NoJSExtract           bool
+	NoJSChunks            bool
+	JSChunkMaxDepth       *int
+	JSChunkMaxCount       *int
+	JSChunkMaxBytes       *int64
+	JSChunkMaxTotalBytes  *int64
+	JSChunkFetchTimeoutMS *int
+	Backend               string
+	MaxSession            int
+	MaxPages              int
+	RatePerSec            float64
+	RawDump               bool
+	MetricsFile           string
+	RootsFile             string
+	Passthrough           string
+	IPAllow               string
+	IPDeny                string
+	Concurrency           int
+	ExtraSeeds            string
 }
 
 func (o Overrides) Apply(c *config.Config) {
@@ -204,6 +205,9 @@ func (o Overrides) Apply(c *config.Config) {
 	}
 	if o.JSChunkMaxTotalBytes != nil {
 		c.Crawl.JSChunks.MaxTotalBytes = *o.JSChunkMaxTotalBytes
+	}
+	if o.JSChunkFetchTimeoutMS != nil {
+		c.Crawl.JSChunks.FetchTimeoutMS = *o.JSChunkFetchTimeoutMS
 	}
 	if o.RawDump {
 		c.Output.RawDump = true

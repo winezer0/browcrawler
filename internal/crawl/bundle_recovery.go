@@ -12,11 +12,12 @@ import (
 )
 
 type bundleChunkOptions struct {
-	Enabled       bool
-	MaxDepth      int
-	MaxCount      int
-	MaxChunkBytes int64
-	MaxTotalBytes int64
+	Enabled        bool
+	MaxDepth       int
+	MaxCount       int
+	MaxChunkBytes  int64
+	MaxTotalBytes  int64
+	FetchTimeoutMS int
 }
 
 type bundleChunkCandidate struct {
@@ -43,6 +44,7 @@ type browserChunkFetchResult struct {
 	OK        bool   `json:"ok"`
 	Body      string `json:"body"`
 	Truncated bool   `json:"truncated"`
+	TimedOut  bool   `json:"timed_out"`
 	Status    int    `json:"status"`
 	Error     string `json:"error"`
 }
@@ -54,7 +56,7 @@ func extractJSWithChunks(ctx context.Context, evaluator pageEvaluator, bodies []
 	if !options.Enabled {
 		return extractJS(bodies, pageURL, nil)
 	}
-	return expandBundleChunks(ctx, bodies, pageURL, browserBundleChunkFetcher(evaluator), options)
+	return expandBundleChunks(ctx, bodies, pageURL, browserBundleChunkFetcher(evaluator, options.FetchTimeoutMS), options)
 }
 
 func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL string, fetch bundleChunkFetcher, options bundleChunkOptions) jsExtractionResult {
@@ -134,18 +136,21 @@ func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL s
 	}
 }
 
-func browserBundleChunkFetcher(evaluator pageEvaluator) bundleChunkFetcher {
+func browserBundleChunkFetcher(evaluator pageEvaluator, timeoutMS int) bundleChunkFetcher {
 	if evaluator == nil {
 		return nil
 	}
 	return func(ctx context.Context, target string, maxBytes int64) ([]byte, bool, error) {
-		raw, err := evaluator.Eval(ctx, browserChunkFetchExpression(target, maxBytes))
+		raw, err := evaluator.Eval(ctx, browserChunkFetchExpression(target, maxBytes, timeoutMS))
 		if err != nil {
 			return nil, false, err
 		}
 		var result browserChunkFetchResult
 		if err := json.Unmarshal([]byte(raw), &result); err != nil {
 			return nil, false, fmt.Errorf("decode browser chunk response: %w", err)
+		}
+		if result.TimedOut {
+			return nil, false, fmt.Errorf("browser chunk fetch timed out after %dms", timeoutMS)
 		}
 		if result.Truncated {
 			return nil, true, nil
@@ -161,13 +166,16 @@ func browserBundleChunkFetcher(evaluator pageEvaluator) bundleChunkFetcher {
 	}
 }
 
-func browserChunkFetchExpression(target string, maxBytes int64) string {
+func browserChunkFetchExpression(target string, maxBytes int64, timeoutMS int) string {
 	targetJSON, _ := json.Marshal(target)
 	return fmt.Sprintf(`(async () => {
 	const target = %s;
 	const limit = %d;
+	const timeoutMs = %d;
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	try {
-		const response = await fetch(target, {credentials: "same-origin", redirect: "follow", cache: "no-store"});
+		const response = await fetch(target, {credentials: "same-origin", redirect: "follow", cache: "no-store", signal: controller.signal});
 		const finalURL = new URL(response.url || target, location.href);
 		if (finalURL.origin !== location.origin) return JSON.stringify({ok: false, error: "cross-origin redirect"});
 		if (!response.ok) return JSON.stringify({ok: false, status: response.status, error: "HTTP error"});
@@ -189,9 +197,11 @@ func browserChunkFetchExpression(target string, maxBytes int64) string {
 		body += decoder.decode();
 		return JSON.stringify({ok: true, body, size});
 	} catch (error) {
-		return JSON.stringify({ok: false, error: String(error)});
+		return JSON.stringify({ok: false, timed_out: controller.signal.aborted, error: String(error)});
+	} finally {
+		clearTimeout(timer);
 	}
-})`, string(targetJSON), maxBytes)
+})`, string(targetJSON), maxBytes, timeoutMS)
 }
 
 func chunkURLKey(raw string) string {

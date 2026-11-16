@@ -10,6 +10,7 @@ import (
 func TestOverridesApply(t *testing.T) {
 	c := config.Default()
 	chunkDepth, chunkCount := 3, 24
+	chunkTimeout := 8000
 	chunkBytes, totalChunkBytes := int64(1<<20), int64(4<<20)
 	Overrides{
 		Scope: "any", Depth: 3, Traffic: "t.jsonl", Discovered: "d.jsonl", HAR: "h.har",
@@ -19,6 +20,7 @@ func TestOverridesApply(t *testing.T) {
 		Passthrough: "a.com, *.b.com", IPAllow: "127.0.0.0/8", IPDeny: "10.0.0.0/8",
 		NoJSChunks: true, JSChunkMaxDepth: &chunkDepth, JSChunkMaxCount: &chunkCount,
 		JSChunkMaxBytes: &chunkBytes, JSChunkMaxTotalBytes: &totalChunkBytes,
+		JSChunkFetchTimeoutMS: &chunkTimeout,
 	}.Apply(c)
 
 	checks := map[string]bool{
@@ -43,6 +45,7 @@ func TestOverridesApply(t *testing.T) {
 		"chunk count":     c.Crawl.JSChunks.MaxCount == 24,
 		"chunk bytes":     c.Crawl.JSChunks.MaxChunkBytes == 1<<20,
 		"chunk total":     c.Crawl.JSChunks.MaxTotalBytes == 4<<20,
+		"chunk timeout":   c.Crawl.JSChunks.FetchTimeoutMS == 8000,
 		"raw dump":        c.Output.RawDump,
 		"metrics enabled": c.Metrics.Enabled && c.Metrics.File == "m.jsonl",
 		"roots file":      c.Mitm.PublicRootsFile == "roots.pem",

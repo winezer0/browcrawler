@@ -98,11 +98,12 @@ type CrawlConfig struct {
 }
 
 type JSChunksConfig struct {
-	Enabled       bool  `yaml:"enabled"`
-	MaxDepth      int   `yaml:"max_depth"`
-	MaxCount      int   `yaml:"max_count"`
-	MaxChunkBytes int64 `yaml:"max_chunk_bytes"`
-	MaxTotalBytes int64 `yaml:"max_total_bytes"`
+	Enabled        bool  `yaml:"enabled"`
+	MaxDepth       int   `yaml:"max_depth"`
+	MaxCount       int   `yaml:"max_count"`
+	MaxChunkBytes  int64 `yaml:"max_chunk_bytes"`
+	MaxTotalBytes  int64 `yaml:"max_total_bytes"`
+	FetchTimeoutMS int   `yaml:"fetch_timeout_ms"`
 }
 
 type MitmConfig struct {
@@ -186,6 +187,7 @@ func Default() *Config {
 			JSChunks: JSChunksConfig{
 				Enabled: true, MaxDepth: 2, MaxCount: 16,
 				MaxChunkBytes: 2 << 20, MaxTotalBytes: 8 << 20,
+				FetchTimeoutMS: 15000,
 			},
 		},
 		Mitm: MitmConfig{

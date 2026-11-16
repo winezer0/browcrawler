@@ -115,12 +115,13 @@ bin/crawler.exe --url https://target/ --depth 2 --interactions 5 \
 | `crawl.js_chunks.max_count` | 16 | 每页最多尝试读取的 chunk 数；硬上限 128 |
 | `crawl.js_chunks.max_chunk_bytes` | 2MiB | 单 chunk 最大响应体；硬上限 16MiB |
 | `crawl.js_chunks.max_total_bytes` | 8MiB | 每页累计响应体上限；硬上限 64MiB |
+| `crawl.js_chunks.fetch_timeout_ms` | 15000 | 单个 chunk 浏览器请求超时；小于 `timeout.navigation_ms`，硬上限 120000，可用 `--js-chunk-timeout-ms` 覆盖 |
 | `crawl.url_pattern_threshold` | 10 | 路径段泛化阈值；0 禁用 |
 | `crawl.url_pattern_ttl_seconds` | 0 | 去重条目过期时间（秒）；超大站建议 3600 |
 | `crawl.nav_retries` | 0 | 导航失败/429/503 重试次数（指数退避+jitter） |
 | `crawl.host_rate_per_sec` | 0 | 每主机限速 |
 
-懒加载 chunk 通过当前浏览器页的 `fetch` 读取，仅接受同源响应（包括重定向后的最终地址），并使用浏览器现有的同源凭据；响应正文只送入静态解析器，不执行或导入脚本。CLI 可用 `--js-chunk-max-depth`、`--js-chunk-max-count`、`--js-chunk-max-bytes`、`--js-chunk-max-total-bytes` 覆盖配置。运行摘要提供 `bundle_chunks_fetched` 和 `bundle_truncated`；启用 metrics 时也会记录解析截断、超限 chunk 和抓取失败计数。
+懒加载 chunk 通过当前浏览器页的 `fetch` 读取，仅接受同源响应（包括重定向后的最终地址），并使用浏览器现有的同源凭据；响应正文只送入静态解析器，不执行或导入脚本。CLI 可用 `--js-chunk-max-depth`、`--js-chunk-max-count`、`--js-chunk-max-bytes`、`--js-chunk-max-total-bytes`、`--js-chunk-timeout-ms` 覆盖配置。运行摘要包含 `bundle_chunks_fetched`、`bundle_truncated` 和 `bundle_chunk_fetch_errors`；启用 metrics 时也会记录解析截断、超限 chunk 和抓取失败计数。
 | `crawl.auth_file` / `credentials` | 空 | 认证态注入 |
 | `mitm.merge_public_roots` | false | 需同时给 `public_roots_file`（PEM） |
 | `mitm.tls_passthrough` | [] | 不解密直通的域名（需公共根；Chrome 后端除外） |

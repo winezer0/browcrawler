@@ -30,6 +30,9 @@ func TestBrowserBundleChunkFetchUsesSessionCookiesAndRejectsCrossOriginRedirect(
 
 	var pageOrigin string
 	var crossOriginCookie atomic.Bool
+	var largeChunkServed atomic.Bool
+	var slowChunkRequested atomic.Bool
+	var slowChunkCanceled atomic.Bool
 	crossOrigin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", pageOrigin)
 		w.Header().Set("Content-Type", "application/javascript")
@@ -60,6 +63,14 @@ func TestBrowserBundleChunkFetchUsesSessionCookiesAndRejectsCrossOriginRedirect(
 			_, _ = io.WriteString(w, `fetch("/api/from-browser-chunk");`)
 		case "/assets/redirect.js":
 			http.Redirect(w, r, crossOrigin.URL+"/target.js", http.StatusFound)
+		case "/assets/large.js":
+			largeChunkServed.Store(true)
+			w.Header().Set("Content-Type", "application/javascript")
+			_, _ = io.WriteString(w, strings.Repeat("x", 256))
+		case "/assets/slow.js":
+			slowChunkRequested.Store(true)
+			<-r.Context().Done()
+			slowChunkCanceled.Store(true)
 		default:
 			http.NotFound(w, r)
 		}
@@ -82,17 +93,27 @@ func TestBrowserBundleChunkFetchUsesSessionCookiesAndRejectsCrossOriginRedirect(
 	if err := driver.Navigate(ctx, pageServer.URL+"/page"); err != nil {
 		t.Fatalf("navigate fixture: %v", err)
 	}
-	entry := `/* browser integration fixture */ import("./chunk.js"); import("./redirect.js");`
+	options := testBundleChunkOptions()
+	options.MaxChunkBytes = 64
+	options.MaxTotalBytes = 256
+	options.FetchTimeoutMS = 250
+	entry := `/* browser integration fixture */ import("./chunk.js"); import("./redirect.js"); import("./large.js"); import("./slow.js");`
 	result := extractJSWithChunks(ctx, driver, []storage.JSBody{{
 		URL: pageServer.URL + "/assets/app.js", Body: []byte(entry),
-	}}, pageServer.URL+"/page", testBundleChunkOptions())
+	}}, pageServer.URL+"/page", options)
 	if !sessionCookieSeen.Load() {
 		t.Fatal("same-origin chunk request did not carry the page session cookie")
 	}
 	if crossOriginCookie.Load() {
 		t.Fatal("same-origin credentials leaked through a cross-origin redirect")
 	}
-	if result.FetchedChunks != 1 || result.ChunkFetchErrors != 1 {
+	if !largeChunkServed.Load() || result.TruncatedChunkBodies != 1 {
+		t.Fatalf("browser response size limit was not enforced: served=%t result=%+v", largeChunkServed.Load(), result)
+	}
+	if !slowChunkRequested.Load() || !slowChunkCanceled.Load() {
+		t.Fatalf("browser fetch timeout did not abort the stalled request: requested=%t canceled=%t", slowChunkRequested.Load(), slowChunkCanceled.Load())
+	}
+	if result.FetchedChunks != 1 || result.ChunkFetchErrors != 2 {
 		t.Fatalf("unexpected browser fetch outcome: %+v", result)
 	}
 	for _, discovery := range result.Discoveries {

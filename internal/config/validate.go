@@ -12,6 +12,7 @@ const (
 	maxJSChunkCount      = 128
 	maxJSChunkBytes      = 16 << 20
 	maxJSChunkTotalBytes = 64 << 20
+	maxJSChunkTimeoutMS  = 120000
 )
 
 // Validate 是配置层的唯一校验入口，纯函数（只读文件系统以确认外部依赖文件存在）。
@@ -105,9 +106,15 @@ func (c *Config) validateJSChunks() error {
 	if chunks.MaxTotalBytes < 0 || chunks.MaxTotalBytes > maxJSChunkTotalBytes {
 		return fmt.Errorf("crawl.js_chunks.max_total_bytes=%d 必须在 0..%d", chunks.MaxTotalBytes, maxJSChunkTotalBytes)
 	}
+	if chunks.FetchTimeoutMS < 0 || chunks.FetchTimeoutMS > maxJSChunkTimeoutMS {
+		return fmt.Errorf("crawl.js_chunks.fetch_timeout_ms=%d 必须在 0..%d", chunks.FetchTimeoutMS, maxJSChunkTimeoutMS)
+	}
 	if chunks.Enabled {
-		if chunks.MaxCount == 0 || chunks.MaxChunkBytes == 0 || chunks.MaxTotalBytes == 0 {
-			return fmt.Errorf("crawl.js_chunks 启用时 max_count、max_chunk_bytes、max_total_bytes 必须大于 0")
+		if chunks.MaxCount == 0 || chunks.MaxChunkBytes == 0 || chunks.MaxTotalBytes == 0 || chunks.FetchTimeoutMS == 0 {
+			return fmt.Errorf("crawl.js_chunks 启用时 max_count、max_chunk_bytes、max_total_bytes、fetch_timeout_ms 必须大于 0")
+		}
+		if c.Timeout.NavigationMS > 0 && chunks.FetchTimeoutMS >= c.Timeout.NavigationMS {
+			return fmt.Errorf("crawl.js_chunks.fetch_timeout_ms 必须小于 timeout.navigation_ms（浏览器求值超时）")
 		}
 		if chunks.MaxChunkBytes > chunks.MaxTotalBytes {
 			return fmt.Errorf("crawl.js_chunks.max_chunk_bytes 不能大于 max_total_bytes")
