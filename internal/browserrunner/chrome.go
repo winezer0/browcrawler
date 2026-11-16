@@ -51,7 +51,10 @@ func (c *ChromeRunner) Start(_ context.Context, proxyAddr string) error {
 		return err
 	}
 	c.cdpPort = port
-	profile := filepath.Join(c.dir, "chrome-profile")
+	profile, err := filepath.Abs(filepath.Join(c.dir, "chrome-profile"))
+	if err != nil {
+		return fmt.Errorf("resolve chrome profile: %w", err)
+	}
 	if err := os.MkdirAll(profile, 0o755); err != nil {
 		return err
 	}
