@@ -33,24 +33,29 @@ type cli struct {
 	Scope string `name:"scope" help:"域名范围，逗号分隔；re: 前缀为正则；any 表示不限域"`
 
 	// 爬取
-	Depth           int     `name:"depth" short:"d" help:"BFS 深度（-1 使用配置值）" default:"-1"`
-	MaxPages        int     `name:"max-pages" short:"m" help:"单任务最大页面数（0=不限）" default:"0"`
-	RatePerSec      float64 `name:"rate" short:"r" help:"每秒最多导航次数（0=不限速）" default:"0"`
-	HostRate        float64 `name:"host-rate" help:"每主机每秒最多导航次数" default:"0"`
-	SettleMS        int     `name:"settle-ms" short:"s" help:"页面 load 后等待毫秒数" default:"-1"`
-	Resume          bool    `name:"resume" help:"从 work/checkpoints 断点恢复（按 seed 匹配）"`
-	Retries         int     `name:"retries" help:"导航失败/429|503 重试次数（指数退避）" default:"0"`
-	Interactions    int     `name:"interactions" help:"每页交互点击上限（触发 onclick 隐藏接口，0=禁用）" default:"0"`
-	NoForms         bool    `name:"no-forms" help:"关闭表单自动填充与提交"`
-	NoSafety        bool    `name:"no-safety" help:"关闭危险操作防护（登出/改密码/删除类将真实触发，慎用）"`
-	ObeyRobots      bool    `name:"obey-robots" help:"遵守目标站点 robots.txt"`
-	ScopeMode       string  `name:"scope-mode" help:"作用域档位 fqdn|rdn|dnk|regex|all（空=legacy 由 --scope 推导）"`
-	ScopeValue      string  `name:"scope-value" help:"scope-mode=dnk 的关键字 / regex 的正则；fqdn/rdn 留空用 seed 主机"`
-	NoJSExtract     bool    `name:"no-js-extract" help:"关闭 JS 接口提取（basecrawler/parse）"`
-	NoRuntimeRoute  bool    `name:"no-runtime-route" help:"关闭运行时路由捕获"`
-	FeedPath        string  `name:"feed" help:"外部资产回灌文件：basecrawler JSONL 或纯文本 URL 列表"`
-	NoWSCapture     bool    `name:"no-ws-capture" help:"关闭 WebSocket 帧捕获"`
-	DeliverOutScope bool    `name:"deliver-outscope" help:"域外流量单独导出 <out>.outscope.txt（第三方资产清单）"`
+	Depth                int     `name:"depth" short:"d" help:"BFS 深度（-1 使用配置值）" default:"-1"`
+	MaxPages             int     `name:"max-pages" short:"m" help:"单任务最大页面数（0=不限）" default:"0"`
+	RatePerSec           float64 `name:"rate" short:"r" help:"每秒最多导航次数（0=不限速）" default:"0"`
+	HostRate             float64 `name:"host-rate" help:"每主机每秒最多导航次数" default:"0"`
+	SettleMS             int     `name:"settle-ms" short:"s" help:"页面 load 后等待毫秒数" default:"-1"`
+	Resume               bool    `name:"resume" help:"从 work/checkpoints 断点恢复（按 seed 匹配）"`
+	Retries              int     `name:"retries" help:"导航失败/429|503 重试次数（指数退避）" default:"0"`
+	Interactions         int     `name:"interactions" help:"每页交互点击上限（触发 onclick 隐藏接口，0=禁用）" default:"0"`
+	NoForms              bool    `name:"no-forms" help:"关闭表单自动填充与提交"`
+	NoSafety             bool    `name:"no-safety" help:"关闭危险操作防护（登出/改密码/删除类将真实触发，慎用）"`
+	ObeyRobots           bool    `name:"obey-robots" help:"遵守目标站点 robots.txt"`
+	ScopeMode            string  `name:"scope-mode" help:"作用域档位 fqdn|rdn|dnk|regex|all（空=legacy 由 --scope 推导）"`
+	ScopeValue           string  `name:"scope-value" help:"scope-mode=dnk 的关键字 / regex 的正则；fqdn/rdn 留空用 seed 主机"`
+	NoJSExtract          bool    `name:"no-js-extract" help:"关闭 JS 接口提取（basecrawler/parse）"`
+	NoJSChunks           bool    `name:"no-js-chunks" help:"关闭浏览器会话内的同源懒加载 JS chunk 抓取"`
+	JSChunkMaxDepth      int     `name:"js-chunk-max-depth" help:"chunk 递归深度上限（-1 使用配置值）" default:"-1"`
+	JSChunkMaxCount      int     `name:"js-chunk-max-count" help:"每页 chunk 抓取次数上限（-1 使用配置值）" default:"-1"`
+	JSChunkMaxBytes      int64   `name:"js-chunk-max-bytes" help:"单个 JS chunk 最大字节数（-1 使用配置值）" default:"-1"`
+	JSChunkMaxTotalBytes int64   `name:"js-chunk-max-total-bytes" help:"每页 JS chunk 总字节上限（-1 使用配置值）" default:"-1"`
+	NoRuntimeRoute       bool    `name:"no-runtime-route" help:"关闭运行时路由捕获"`
+	FeedPath             string  `name:"feed" help:"外部资产回灌文件：basecrawler JSONL 或纯文本 URL 列表"`
+	NoWSCapture          bool    `name:"no-ws-capture" help:"关闭 WebSocket 帧捕获"`
+	DeliverOutScope      bool    `name:"deliver-outscope" help:"域外流量单独导出 <out>.outscope.txt（第三方资产清单）"`
 
 	// 输出
 	Out              string `name:"out" short:"o" help:"流量 JSONL 输出路径"`
@@ -90,49 +95,68 @@ type cli struct {
 // toOverrides 映射为 internal/app 的覆盖项（v0.2 Overrides.Apply 语义不变）。
 func (c *cli) toOverrides() app.Overrides {
 	o := app.Overrides{
-		Scope:            c.Scope,
-		Depth:            c.Depth,
-		Traffic:          c.Out,
-		Discovered:       c.Discovered,
-		HAR:              c.HAR,
-		Requests:         c.Requests,
-		Report:           c.Report,
-		RequestsFiltered: c.RequestsFiltered,
-		SaveJS:           c.SaveJS,
-		ScopeMode:        c.ScopeMode,
-		ScopeValue:       c.ScopeValue,
-		NoForms:          c.NoForms,
-		Resume:           c.Resume,
-		NavRetries:       c.Retries,
-		MaxInteractions:  c.Interactions,
-		HostRate:         c.HostRate,
-		AuthFile:         c.AuthFile,
-		Creds:            c.Creds,
-		Upstream:         c.Upstream,
-		NoStealth:        c.NoStealth,
-		ObeyRobots:       c.ObeyRobots,
-		MergeRoots:       c.MergeRoots,
-		PerSession:       c.PerSessionCA,
-		KeepDir:          c.KeepDir,
-		SettleMS:         c.SettleMS,
-		NoJSExtract:      c.NoJSExtract,
-		NoRuntimeRoute:   c.NoRuntimeRoute,
-		NoWSCapture:      c.NoWSCapture,
-		NoSafety:         c.NoSafety,
-		FeedPath:         c.FeedPath,
-		DeliverOutScope:  c.DeliverOutScope,
-		Backend:          c.Backend,
-		MaxSession:       c.MaxSession,
-		MaxPages:         c.MaxPages,
-		RatePerSec:       c.RatePerSec,
-		RawDump:          c.RawDump,
-		MetricsFile:      c.MetricsFile,
-		RootsFile:        c.RootsFile,
-		Passthrough:      c.Passthrough,
-		IPAllow:          c.IPAllow,
-		IPDeny:           c.IPDeny,
+		Scope:                c.Scope,
+		Depth:                c.Depth,
+		Traffic:              c.Out,
+		Discovered:           c.Discovered,
+		HAR:                  c.HAR,
+		Requests:             c.Requests,
+		Report:               c.Report,
+		RequestsFiltered:     c.RequestsFiltered,
+		SaveJS:               c.SaveJS,
+		ScopeMode:            c.ScopeMode,
+		ScopeValue:           c.ScopeValue,
+		NoForms:              c.NoForms,
+		Resume:               c.Resume,
+		NavRetries:           c.Retries,
+		MaxInteractions:      c.Interactions,
+		HostRate:             c.HostRate,
+		AuthFile:             c.AuthFile,
+		Creds:                c.Creds,
+		Upstream:             c.Upstream,
+		NoStealth:            c.NoStealth,
+		ObeyRobots:           c.ObeyRobots,
+		MergeRoots:           c.MergeRoots,
+		PerSession:           c.PerSessionCA,
+		KeepDir:              c.KeepDir,
+		SettleMS:             c.SettleMS,
+		NoJSExtract:          c.NoJSExtract,
+		NoJSChunks:           c.NoJSChunks,
+		JSChunkMaxDepth:      optionalInt(c.JSChunkMaxDepth),
+		JSChunkMaxCount:      optionalInt(c.JSChunkMaxCount),
+		JSChunkMaxBytes:      optionalInt64(c.JSChunkMaxBytes),
+		JSChunkMaxTotalBytes: optionalInt64(c.JSChunkMaxTotalBytes),
+		NoRuntimeRoute:       c.NoRuntimeRoute,
+		NoWSCapture:          c.NoWSCapture,
+		NoSafety:             c.NoSafety,
+		FeedPath:             c.FeedPath,
+		DeliverOutScope:      c.DeliverOutScope,
+		Backend:              c.Backend,
+		MaxSession:           c.MaxSession,
+		MaxPages:             c.MaxPages,
+		RatePerSec:           c.RatePerSec,
+		RawDump:              c.RawDump,
+		MetricsFile:          c.MetricsFile,
+		RootsFile:            c.RootsFile,
+		Passthrough:          c.Passthrough,
+		IPAllow:              c.IPAllow,
+		IPDeny:               c.IPDeny,
 	}
 	return o
+}
+
+func optionalInt(value int) *int {
+	if value < 0 {
+		return nil
+	}
+	return &value
+}
+
+func optionalInt64(value int64) *int64 {
+	if value < 0 {
+		return nil
+	}
+	return &value
 }
 
 func main() {

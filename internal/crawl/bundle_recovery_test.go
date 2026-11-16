@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/winezer0/browcrawler/internal/config"
 	"github.com/winezer0/browcrawler/internal/storage"
 )
 
@@ -73,6 +74,14 @@ func (e *httpBackedPageEvaluator) Eval(ctx context.Context, expression string) (
 	return string(encoded), err
 }
 
+func testBundleChunkOptions() bundleChunkOptions {
+	defaults := config.Default().Crawl.JSChunks
+	return bundleChunkOptions{
+		Enabled: defaults.Enabled, MaxDepth: defaults.MaxDepth, MaxCount: defaults.MaxCount,
+		MaxChunkBytes: defaults.MaxChunkBytes, MaxTotalBytes: defaults.MaxTotalBytes,
+	}
+}
+
 func TestExpandBundleChunksFindsAPIsInUnloadedNestedChunks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript")
@@ -95,7 +104,7 @@ func TestExpandBundleChunksFindsAPIsInUnloadedNestedChunks(t *testing.T) {
 	result := extractJSWithChunks(context.Background(), evaluator, []storage.JSBody{{
 		URL:  server.URL + "/assets/app.js",
 		Body: []byte(entry),
-	}}, server.URL+"/")
+	}}, server.URL+"/", testBundleChunkOptions())
 
 	if result.FetchedChunks != 2 {
 		t.Fatalf("fetched %d chunks, want 2; fetches=%v", result.FetchedChunks, evaluator.urls)
@@ -133,7 +142,7 @@ func TestExpandBundleChunksSkipsCapturedAndCrossOriginChunks(t *testing.T) {
 	}, "https://site.test/", func(context.Context, string, int64) ([]byte, bool, error) {
 		t.Fatal("captured and cross-origin chunks must not be fetched")
 		return nil, false, nil
-	})
+	}, testBundleChunkOptions())
 	if result.FetchedChunks != 0 {
 		t.Fatalf("unexpected fetched chunk count: %d", result.FetchedChunks)
 	}
@@ -146,9 +155,11 @@ func TestExpandBundleChunksSkipsCapturedAndCrossOriginChunks(t *testing.T) {
 }
 
 func TestExpandBundleChunksEnforcesFetchCountLimit(t *testing.T) {
+	options := testBundleChunkOptions()
+	options.MaxCount = 3
 	var source strings.Builder
 	source.WriteString("/* lazy chunks */ ")
-	for i := 0; i < maxBundleChunkFetches+5; i++ {
+	for i := 0; i < options.MaxCount+5; i++ {
 		fmt.Fprintf(&source, "import(\"/chunks/%d.js\");", i)
 	}
 	calls := 0
@@ -157,9 +168,56 @@ func TestExpandBundleChunksEnforcesFetchCountLimit(t *testing.T) {
 	}}, "https://site.test/", func(context.Context, string, int64) ([]byte, bool, error) {
 		calls++
 		return []byte(`fetch("/api/from-chunk");`), false, nil
-	})
-	if calls != maxBundleChunkFetches || result.FetchedChunks != maxBundleChunkFetches {
+	}, options)
+	if calls != options.MaxCount || result.FetchedChunks != int64(options.MaxCount) {
 		t.Fatalf("fetch budget not enforced: calls=%d fetched=%d", calls, result.FetchedChunks)
+	}
+}
+
+func TestExpandBundleChunksUsesConfiguredDepthAndByteBudgets(t *testing.T) {
+	entry := []byte(`/* configured depth fixture */ import("./chunk.js");`)
+	options := testBundleChunkOptions()
+	options.MaxDepth = 1
+	options.MaxChunkBytes = 64
+	options.MaxTotalBytes = 80
+	var limits []int64
+	result := expandBundleChunks(context.Background(), []storage.JSBody{{
+		URL: "https://site.test/assets/app.js", Body: entry,
+	}}, "https://site.test/", func(_ context.Context, target string, maxBytes int64) ([]byte, bool, error) {
+		limits = append(limits, maxBytes)
+		if strings.HasSuffix(target, "/chunk.js") {
+			return []byte(`import("./nested.js"); fetch("/api/first");`), false, nil
+		}
+		return nil, true, nil
+	}, options)
+	if result.FetchedChunks != 1 || result.TruncatedChunkBodies != 0 {
+		t.Fatalf("depth limit was not honored: %+v", result)
+	}
+	if len(limits) != 1 || limits[0] != 64 {
+		t.Fatalf("fetch did not receive configured byte budget: %v", limits)
+	}
+}
+
+func TestExpandBundleChunksReducesPerFetchLimitByRemainingPageBudget(t *testing.T) {
+	entry := []byte(`/* byte budget fixture */ import("./first.js"); import("./second.js");`)
+	options := testBundleChunkOptions()
+	options.MaxChunkBytes = 64
+	options.MaxTotalBytes = 40
+	var limits []int64
+	result := expandBundleChunks(context.Background(), []storage.JSBody{{
+		URL: "https://site.test/assets/app.js", Body: entry,
+	}}, "https://site.test/", func(_ context.Context, _ string, maxBytes int64) ([]byte, bool, error) {
+		limits = append(limits, maxBytes)
+		if len(limits) == 1 {
+			return []byte(strings.Repeat("x", 25)), false, nil
+		}
+		return nil, true, nil
+	}, options)
+	if len(limits) != 2 || limits[0] != 40 || limits[1] != 15 {
+		t.Fatalf("page byte budget was not applied to each fetch: %v", limits)
+	}
+	if result.FetchedChunks != 1 || result.TruncatedChunkBodies != 1 {
+		t.Fatalf("unexpected byte-budget outcome: %+v", result)
 	}
 }
 
@@ -172,8 +230,21 @@ func TestExpandBundleChunksReportsOversizedBodies(t *testing.T) {
 		URL: "https://site.test/assets/app.js", Body: []byte(entry),
 	}}, "https://site.test/", func(context.Context, string, int64) ([]byte, bool, error) {
 		return nil, true, nil
-	})
+	}, testBundleChunkOptions())
 	if result.TruncatedChunkBodies != 1 {
 		t.Fatalf("oversized chunk count = %d, want 1", result.TruncatedChunkBodies)
 	}
+}
+
+func TestDisabledBundleFetchingKeepsStaticExtraction(t *testing.T) {
+	entry := []byte(`/* disabled chunk fetch */ import("./lazy.js");`)
+	result := extractJSWithChunks(context.Background(), nil, []storage.JSBody{{
+		URL: "https://site.test/assets/app.js", Body: entry,
+	}}, "https://site.test/", bundleChunkOptions{})
+	for _, discovery := range result.Discoveries {
+		if discovery.URL == "https://site.test/assets/lazy.js" && strings.HasPrefix(discovery.Source, "bundle-chunk:") {
+			return
+		}
+	}
+	t.Fatalf("disabling fetch should keep static chunk discoveries: %+v", result.Discoveries)
 }

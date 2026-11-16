@@ -91,8 +91,18 @@ type CrawlConfig struct {
 	// angular/next/nuxt/sveltekit/generic）读浏览器内路由表 + history hook，
 	// scope 内路由回灌 BFS 队列真实打开并录制。纯只读观察。
 	RuntimeRoute bool `yaml:"runtime_route"`
+	// JSChunks controls bounded same-origin fetching of recovered lazy JavaScript chunks.
+	JSChunks JSChunksConfig `yaml:"js_chunks"`
 	// Resume 由 CLI -resume 设置；config 里无对应 yaml（避免误开）。
 	Resume bool `yaml:"-"`
+}
+
+type JSChunksConfig struct {
+	Enabled       bool  `yaml:"enabled"`
+	MaxDepth      int   `yaml:"max_depth"`
+	MaxCount      int   `yaml:"max_count"`
+	MaxChunkBytes int64 `yaml:"max_chunk_bytes"`
+	MaxTotalBytes int64 `yaml:"max_total_bytes"`
 }
 
 type MitmConfig struct {
@@ -173,6 +183,10 @@ func Default() *Config {
 			WSCapture:    true,
 			RuntimeRoute: true,
 			Safety:       true,
+			JSChunks: JSChunksConfig{
+				Enabled: true, MaxDepth: 2, MaxCount: 16,
+				MaxChunkBytes: 2 << 20, MaxTotalBytes: 8 << 20,
+			},
 		},
 		Mitm: MitmConfig{
 			CACrt: "./assets/ca/ca.crt",

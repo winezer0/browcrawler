@@ -255,7 +255,11 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 			st.Discovered += c.collectRuntimeRoutes(ctx, it, seen, &queue)
 		}
 		if c.cfg.Crawl.JSExtract {
-			analysis := extractJSWithChunks(ctx, c.driver, c.rec.TakeJS(), it.URL)
+			chunkCfg := c.cfg.Crawl.JSChunks
+			analysis := extractJSWithChunks(ctx, c.driver, c.rec.TakeJS(), it.URL, bundleChunkOptions{
+				Enabled: chunkCfg.Enabled, MaxDepth: chunkCfg.MaxDepth, MaxCount: chunkCfg.MaxCount,
+				MaxChunkBytes: chunkCfg.MaxChunkBytes, MaxTotalBytes: chunkCfg.MaxTotalBytes,
+			})
 			jsLinks = dropBrowserKnownBundleRoutes(analysis.Discoveries, links, seen)
 			st.BundleChunksFetched += analysis.FetchedChunks
 			st.BundleTruncated += analysis.TruncatedBundles + analysis.TruncatedChunkBodies

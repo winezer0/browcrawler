@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+const (
+	maxJSChunkDepth      = 5
+	maxJSChunkCount      = 128
+	maxJSChunkBytes      = 16 << 20
+	maxJSChunkTotalBytes = 64 << 20
+)
+
 // Validate 是配置层的唯一校验入口，纯函数（只读文件系统以确认外部依赖文件存在）。
 // 目标：任何「写了却不会生效」的取值都在启动前明确报错，而不是静默忽略。
 func (c *Config) Validate() error {
@@ -61,6 +68,9 @@ func (c *Config) validateScalars() error {
 	if c.Crawl.SettleMS < 0 {
 		return fmt.Errorf("crawl.settle_ms=%d 必须 >= 0", c.Crawl.SettleMS)
 	}
+	if err := c.validateJSChunks(); err != nil {
+		return err
+	}
 	for name, ms := range map[string]int{
 		"cdp_ready_ms": c.Timeout.CDPReadyMS, "navigation_ms": c.Timeout.NavigationMS,
 		"shutdown_ms": c.Timeout.ShutdownMS, "task_ms": c.Timeout.TaskMS,
@@ -77,6 +87,31 @@ func (c *Config) validateScalars() error {
 	}
 	if c.Metrics.Enabled && strings.TrimSpace(c.Metrics.File) == "" {
 		return fmt.Errorf("metrics.enabled=true 时 metrics.file 不能为空")
+	}
+	return nil
+}
+
+func (c *Config) validateJSChunks() error {
+	chunks := c.Crawl.JSChunks
+	if chunks.MaxDepth < 0 || chunks.MaxDepth > maxJSChunkDepth {
+		return fmt.Errorf("crawl.js_chunks.max_depth=%d 必须在 0..%d", chunks.MaxDepth, maxJSChunkDepth)
+	}
+	if chunks.MaxCount < 0 || chunks.MaxCount > maxJSChunkCount {
+		return fmt.Errorf("crawl.js_chunks.max_count=%d 必须在 0..%d", chunks.MaxCount, maxJSChunkCount)
+	}
+	if chunks.MaxChunkBytes < 0 || chunks.MaxChunkBytes > maxJSChunkBytes {
+		return fmt.Errorf("crawl.js_chunks.max_chunk_bytes=%d 必须在 0..%d", chunks.MaxChunkBytes, maxJSChunkBytes)
+	}
+	if chunks.MaxTotalBytes < 0 || chunks.MaxTotalBytes > maxJSChunkTotalBytes {
+		return fmt.Errorf("crawl.js_chunks.max_total_bytes=%d 必须在 0..%d", chunks.MaxTotalBytes, maxJSChunkTotalBytes)
+	}
+	if chunks.Enabled {
+		if chunks.MaxCount == 0 || chunks.MaxChunkBytes == 0 || chunks.MaxTotalBytes == 0 {
+			return fmt.Errorf("crawl.js_chunks 启用时 max_count、max_chunk_bytes、max_total_bytes 必须大于 0")
+		}
+		if chunks.MaxChunkBytes > chunks.MaxTotalBytes {
+			return fmt.Errorf("crawl.js_chunks.max_chunk_bytes 不能大于 max_total_bytes")
+		}
 	}
 	return nil
 }

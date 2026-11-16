@@ -11,12 +11,13 @@ import (
 	"github.com/winezer0/browcrawler/internal/storage"
 )
 
-const (
-	maxBundleChunkDepth     = 2
-	maxBundleChunkFetches   = 16
-	maxBundleChunkBytes     = 2 << 20
-	maxBundleChunkTotalSize = 8 << 20
-)
+type bundleChunkOptions struct {
+	Enabled       bool
+	MaxDepth      int
+	MaxCount      int
+	MaxChunkBytes int64
+	MaxTotalBytes int64
+}
 
 type bundleChunkCandidate struct {
 	URL   string
@@ -49,14 +50,17 @@ type browserChunkFetchResult struct {
 // extractJSWithChunks parses captured JavaScript and fetches statically
 // recovered, same-origin lazy chunks through the active browser page. It only
 // reads response text; fetched code is never evaluated or imported.
-func extractJSWithChunks(ctx context.Context, evaluator pageEvaluator, bodies []storage.JSBody, pageURL string) jsExtractionResult {
-	return expandBundleChunks(ctx, bodies, pageURL, browserBundleChunkFetcher(evaluator))
+func extractJSWithChunks(ctx context.Context, evaluator pageEvaluator, bodies []storage.JSBody, pageURL string, options bundleChunkOptions) jsExtractionResult {
+	if !options.Enabled {
+		return extractJS(bodies, pageURL, nil)
+	}
+	return expandBundleChunks(ctx, bodies, pageURL, browserBundleChunkFetcher(evaluator), options)
 }
 
-func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL string, fetch bundleChunkFetcher) jsExtractionResult {
+func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL string, fetch bundleChunkFetcher, options bundleChunkOptions) jsExtractionResult {
 	allBodies := append([]storage.JSBody(nil), initial...)
 	depths := make(map[string]int, len(initial))
-	knownBodies := make(map[string]struct{}, len(initial)+maxBundleChunkFetches)
+	knownBodies := make(map[string]struct{}, len(initial)+options.MaxCount)
 	for _, body := range initial {
 		key := chunkURLKey(body.URL)
 		if key != "" {
@@ -69,7 +73,7 @@ func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL s
 	var totalBytes int64
 	for {
 		current := extractJS(allBodies, pageURL, depths)
-		if fetch == nil || ctx.Err() != nil || attempted >= maxBundleChunkFetches {
+		if !options.Enabled || fetch == nil || ctx.Err() != nil || attempted >= int64(options.MaxCount) {
 			current.FetchedChunks = fetched
 			current.ChunkFetchErrors = fetchErrors
 			current.TruncatedChunkBodies = truncatedBodies
@@ -78,7 +82,7 @@ func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL s
 
 		added := false
 		for _, candidate := range current.Chunks {
-			if candidate.Depth > maxBundleChunkDepth || !sameOrigin(pageURL, candidate.URL) {
+			if candidate.Depth > options.MaxDepth || !sameOrigin(pageURL, candidate.URL) {
 				continue
 			}
 			key := chunkURLKey(candidate.URL)
@@ -88,10 +92,10 @@ func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL s
 			if _, exists := knownBodies[key]; exists {
 				continue
 			}
-			if attempted >= maxBundleChunkFetches {
+			if attempted >= int64(options.MaxCount) {
 				break
 			}
-			remainingBytes := int64(maxBundleChunkTotalSize) - totalBytes
+			remainingBytes := options.MaxTotalBytes - totalBytes
 			if remainingBytes <= 0 {
 				truncatedBodies++
 				break
@@ -99,7 +103,7 @@ func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL s
 			// Mark before fetching so failures and cycles cannot cause retries.
 			knownBodies[key] = struct{}{}
 			attempted++
-			maxBytes := int64(maxBundleChunkBytes)
+			maxBytes := options.MaxChunkBytes
 			if remainingBytes < maxBytes {
 				maxBytes = remainingBytes
 			}
@@ -187,7 +191,7 @@ func browserChunkFetchExpression(target string, maxBytes int64) string {
 	} catch (error) {
 		return JSON.stringify({ok: false, error: String(error)});
 	}
-})()`, string(targetJSON), maxBytes)
+})`, string(targetJSON), maxBytes)
 }
 
 func chunkURLKey(raw string) string {

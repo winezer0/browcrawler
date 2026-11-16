@@ -13,6 +13,14 @@ func TestDefaultIsValid(t *testing.T) {
 	}
 }
 
+func TestDefaultJSChunkBudgets(t *testing.T) {
+	chunks := Default().Crawl.JSChunks
+	if !chunks.Enabled || chunks.MaxDepth != 2 || chunks.MaxCount != 16 ||
+		chunks.MaxChunkBytes != 2<<20 || chunks.MaxTotalBytes != 8<<20 {
+		t.Fatalf("unexpected JS chunk defaults: %+v", chunks)
+	}
+}
+
 func TestValidateBackend(t *testing.T) {
 	for _, b := range []string{BackendObscura, BackendChrome, BackendAuto} {
 		c := Default()
@@ -38,6 +46,12 @@ func TestValidateNoSilentPhantoms(t *testing.T) {
 		{"max_session=0", func(c *Config) { c.MaxSession = 0 }},
 		{"max_body_size=0", func(c *Config) { c.MaxBodySize = 0 }},
 		{"negative depth", func(c *Config) { c.Crawl.Depth = -1 }},
+		{"negative js chunk depth", func(c *Config) { c.Crawl.JSChunks.MaxDepth = -1 }},
+		{"js chunk depth above hard limit", func(c *Config) { c.Crawl.JSChunks.MaxDepth = maxJSChunkDepth + 1 }},
+		{"negative js chunk count", func(c *Config) { c.Crawl.JSChunks.MaxCount = -1 }},
+		{"zero enabled js chunk count", func(c *Config) { c.Crawl.JSChunks.MaxCount = 0 }},
+		{"js chunk bytes above hard limit", func(c *Config) { c.Crawl.JSChunks.MaxChunkBytes = maxJSChunkBytes + 1 }},
+		{"js total smaller than per chunk", func(c *Config) { c.Crawl.JSChunks.MaxTotalBytes = c.Crawl.JSChunks.MaxChunkBytes - 1 }},
 		{"negative rate", func(c *Config) { c.Crawl.RatePerSec = -1 }},
 		{"zero navigation timeout", func(c *Config) { c.Timeout.NavigationMS = 0 }},
 		{"zero health interval", func(c *Config) { c.Pool.HealthIntervalMS = 0 }},
@@ -53,6 +67,29 @@ func TestValidateNoSilentPhantoms(t *testing.T) {
 		if err := c.Validate(); err == nil {
 			t.Errorf("%s 应被明确拒绝，不能静默忽略", tc.name)
 		}
+	}
+}
+
+func TestLoadJSChunkConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := `crawl:
+  js_chunks:
+    enabled: false
+    max_depth: 3
+    max_count: 24
+    max_chunk_bytes: 1048576
+    max_total_bytes: 4194304
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := JSChunksConfig{Enabled: false, MaxDepth: 3, MaxCount: 24, MaxChunkBytes: 1 << 20, MaxTotalBytes: 4 << 20}
+	if cfg.Crawl.JSChunks != want {
+		t.Fatalf("loaded JS chunk config = %+v, want %+v", cfg.Crawl.JSChunks, want)
 	}
 }
 

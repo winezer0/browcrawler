@@ -30,6 +30,14 @@ crawl:
   # 留空 = 运行时自动锁定为 seed 主机（防止外链越界）；跨站需显式 --scope any 或列举域名
   scope: ""
   js_extract: true
+  # 静态恢复懒加载 JS chunk 后，通过当前浏览器页同源读取响应正文，不执行 chunk。
+  # max_depth=0 不抓取；数量与字节预算按每个页面计算。
+  js_chunks:
+    enabled: true
+    max_depth: 2
+    max_count: 16
+    max_chunk_bytes: 2097152
+    max_total_bytes: 8388608
   skip_static_body: true
   settle_ms: 600
   max_pages: 0        # 0 = 不限；单个任务最多导航多少页
