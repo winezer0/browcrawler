@@ -219,6 +219,7 @@ func (a *App) runOne(ctx context.Context, seed string, idx, total int) error {
 		a.logger.Printf("%s[result] interrupted: %v", prefix, runErr)
 	}
 	a.logger.Printf("%s[result] %s", prefix, st)
+	a.logger.Printf("%s[completion] %s complete=%t reasons=%v", prefix, st.Completion.Status, st.Completion.Complete, st.Completion.Reasons)
 	a.logger.Printf("%s[result] traffic=%s discovered=%s", prefix, out.Traffic, out.Discovered)
 	if out.HAR != "" {
 		a.logger.Printf("%s[result] har=%s", prefix, out.HAR)

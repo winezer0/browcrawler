@@ -24,16 +24,17 @@ import (
 )
 
 type Stats struct {
-	Pages                  int           `json:"pages"`
-	Failed                 int           `json:"failed"`
-	Discovered             int           `json:"discovered"`
-	JSLinks                int           `json:"js_links"`
-	BundleChunksFetched    int64         `json:"bundle_chunks_fetched"`
-	BundleTruncated        int64         `json:"bundle_truncated"`
-	BundleChunkFetchErrors int64         `json:"bundle_chunk_fetch_errors"`
-	Records                int64         `json:"traffic_records"`
-	ElapsedMS              int64         `json:"elapsed_ms"`
-	Elapsed                time.Duration `json:"-"`
+	Completion             storage.ScanCompletion `json:"completion"`
+	Pages                  int                    `json:"pages"`
+	Failed                 int                    `json:"failed"`
+	Discovered             int                    `json:"discovered"`
+	JSLinks                int                    `json:"js_links"`
+	BundleChunksFetched    int64                  `json:"bundle_chunks_fetched"`
+	BundleTruncated        int64                  `json:"bundle_truncated"`
+	BundleChunkFetchErrors int64                  `json:"bundle_chunk_fetch_errors"`
+	Records                int64                  `json:"traffic_records"`
+	ElapsedMS              int64                  `json:"elapsed_ms"`
+	Elapsed                time.Duration          `json:"-"`
 }
 
 type item struct {
@@ -42,24 +43,25 @@ type item struct {
 }
 
 type Crawler struct {
-	cfg            *config.Config
-	driver         PageDriver
-	rec            *storage.Recorder
-	logger         *log.Logger
-	enc            *json.Encoder
-	discoverySeen  map[string]bool
-	outFile        *os.File
-	scope          func(string) bool
-	safetyFilter   *safety.Safety
-	wsMu           sync.Mutex
-	wsURLs         map[string]string // CDP requestID -> ws(s) 建连 URL
-	limiter        *policy.Limiter
-	robots         *policy.Robots
-	dedup          *DedupSession
-	credentials    *Credentials
-	checkpointPath string
-	resume         bool
-	metrics        metrics.Recorder
+	cfg               *config.Config
+	driver            PageDriver
+	rec               *storage.Recorder
+	logger            *log.Logger
+	enc               *json.Encoder
+	discoverySeen     map[string]bool
+	completionReasons map[string]int
+	outFile           *os.File
+	scope             func(string) bool
+	safetyFilter      *safety.Safety
+	wsMu              sync.Mutex
+	wsURLs            map[string]string // CDP requestID -> ws(s) 建连 URL
+	limiter           *policy.Limiter
+	robots            *policy.Robots
+	dedup             *DedupSession
+	credentials       *Credentials
+	checkpointPath    string
+	resume            bool
+	metrics           metrics.Recorder
 }
 
 // Options 显式列出爬虫的全部依赖；策略与指标为可选（零值/Nop 即关闭）。
@@ -129,7 +131,20 @@ func (c *Crawler) Close() error { return c.outFile.Close() }
 // 统计用命名返回值 + defer 收尾，保证 Ctrl+C / 超时中断时也能拿到真实的记录数与耗时。
 func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error) {
 	t0 := time.Now()
+	c.completionReasons = map[string]int{}
 	defer func() {
+		if st.Failed > 0 {
+			c.noteCompletion("request_failure", st.Failed)
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(runErr, context.DeadlineExceeded) {
+			c.noteCompletion("timeout", 1)
+		} else if errors.Is(ctx.Err(), context.Canceled) || errors.Is(runErr, context.Canceled) {
+			c.noteCompletion("canceled", 1)
+		} else if runErr != nil {
+			c.noteCompletion("fatal_error", 1)
+		}
+		st.Completion = storage.NewScanCompletion(c.completionReasons)
+		c.rec.SetCompletion(st.Completion)
 		st.Records, _ = c.rec.Stats()
 		st.Elapsed = time.Since(t0)
 		st.ElapsedMS = st.Elapsed.Milliseconds()
@@ -189,6 +204,7 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 		}
 		if err := c.limiter.Acquire(ctx, u.Hostname()); err != nil {
 			if errors.Is(err, policy.ErrPageLimit) {
+				c.noteCompletion("page_limit", 1)
 				c.logger.Printf("[crawl] max_pages=%d reached, stopping normally", c.cfg.Crawl.MaxPages)
 				return st, nil
 			}
@@ -196,6 +212,7 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 				return st, ctx.Err()
 			}
 			c.logger.Printf("[crawl] policy blocked: %s: %v", it.URL, err)
+			c.noteCompletion("policy_limit", 1)
 			c.metrics.Inc("crawl.policy_blocked", 1)
 			continue
 		}
@@ -271,6 +288,12 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 			st.BundleChunksFetched += analysis.FetchedChunks
 			st.BundleTruncated += analysis.TruncatedBundles + analysis.TruncatedChunkBodies
 			st.BundleChunkFetchErrors += analysis.ChunkFetchErrors
+			c.noteCompletion("bundle_scan_limit", int(analysis.TruncatedBundles))
+			c.noteCompletion("chunk_body_limit", int(analysis.TruncatedChunkBodies))
+			c.noteCompletion("chunk_fetch_failure", int(analysis.ChunkFetchErrors))
+			c.noteCompletion("chunk_count_limit", int(analysis.ChunkCountLimited))
+			c.noteCompletion("chunk_depth_limit", int(analysis.ChunkDepthLimited))
+			c.noteCompletion("chunk_bytes_limit", int(analysis.ChunkBytesLimited))
 			if analysis.FetchedChunks > 0 {
 				c.metrics.Inc("crawl.bundle_chunks_fetched", analysis.FetchedChunks)
 			}
@@ -308,6 +331,7 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 				n, err := trigger.TriggerInteractions(ctx, c.cfg.Crawl.MaxInteractions)
 				if err != nil {
 					c.logger.Printf("[crawl] interactions failed: %s: %v", it.URL, err)
+					c.noteCompletion("analysis_failure", 1)
 				}
 				c.metrics.Inc("crawl.interactions", int64(n))
 				// 交互后的 DOM 变化（onclick 写入的链接）并入 postLinks 提取。
@@ -348,6 +372,12 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 			st.Discovered += n
 		}
 		if it.Depth >= c.cfg.Crawl.Depth {
+			for _, d := range append(links, postLinks...) {
+				u, err := url.Parse(d.URL)
+				if err == nil && c.scope(u.Hostname()) && isNavigable(d.URL) && !seen[normalize(d.URL)] {
+					c.noteCompletion("depth_boundary_unvisited", 1)
+				}
+			}
 			continue
 		}
 		for _, d := range append(links, postLinks...) {
@@ -437,4 +467,14 @@ func (s Stats) String() string {
 	return fmt.Sprintf("pages=%d failed=%d discovered=%d js_links=%d chunks=%d bundle_truncated=%d bundle_chunk_fetch_errors=%d traffic=%d elapsed=%dms",
 		s.Pages, s.Failed, s.Discovered, s.JSLinks, s.BundleChunksFetched, s.BundleTruncated,
 		s.BundleChunkFetchErrors, s.Records, s.ElapsedMS)
+}
+
+func (c *Crawler) noteCompletion(code string, count int) {
+	if count <= 0 {
+		return
+	}
+	if c.completionReasons == nil {
+		c.completionReasons = map[string]int{}
+	}
+	c.completionReasons[code] += count
 }

@@ -97,6 +97,16 @@ func TestCrawlerRunUsesLoadedJSChunkConfiguration(t *testing.T) {
 	if stats.BundleChunksFetched != 1 || stats.BundleChunkFetchErrors != 1 {
 		t.Fatalf("unexpected crawler chunk stats: %+v", stats)
 	}
+	if stats.Completion.Complete || stats.Completion.Status != "partial_failure" {
+		t.Fatalf("chunk failure marked complete: %+v", stats.Completion)
+	}
+	reasons := map[string]int{}
+	for _, reason := range stats.Completion.Reasons {
+		reasons[reason.Code] = reason.Count
+	}
+	if reasons["chunk_fetch_failure"] != 1 || reasons["chunk_count_limit"] != 1 {
+		t.Fatalf("missing failure/quota evidence: %+v", reasons)
+	}
 	if firstFetches.Load() != 1 || secondFetches.Load() != 1 || thirdFetches.Load() != 0 {
 		t.Fatalf("configured max_count not honored: first=%d second=%d third=%d", firstFetches.Load(), secondFetches.Load(), thirdFetches.Load())
 	}

@@ -37,8 +37,9 @@ type ReportStats struct {
 }
 
 type CrawlReport struct {
-	Stats     ReportStats      `json:"stats"`
-	Endpoints []EndpointReport `json:"endpoints"`
+	Completion *ScanCompletion  `json:"completion,omitempty"`
+	Stats      ReportStats      `json:"stats"`
+	Endpoints  []EndpointReport `json:"endpoints"`
 }
 
 // ExportReport 生成 crawl-report.json：把录制请求按「方法+主机+路径+参数形状」
@@ -46,6 +47,7 @@ type CrawlReport struct {
 func (r *Recorder) ExportReport(path string) error {
 	r.mu.Lock()
 	records := append([]Record(nil), r.records...)
+	completion := r.reportCompletion()
 	r.mu.Unlock()
 
 	stats := ReportStats{Requests: len(records), StatusHistogram: map[string]int{}}
@@ -89,6 +91,7 @@ func (r *Recorder) ExportReport(path string) error {
 	}
 
 	report := CrawlReport{Stats: stats, Endpoints: make([]EndpointReport, 0, len(order))}
+	report.Completion = completion
 	stats.Endpoints = len(order)
 	for _, key := range order {
 		report.Endpoints = append(report.Endpoints, *groups[key])

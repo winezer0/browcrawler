@@ -93,9 +93,13 @@ func (c *Crawler) collectRuntimeRoutes(ctx context.Context, it item, seen map[st
 		n, err := c.writeDiscovery(d)
 		if err != nil {
 			c.logger.Printf("[crawl] runtime-route encode: %v", err)
+			c.noteCompletion("output_failure", 1)
 			return count
 		}
 		count += n
+		if !seen[normalize(d.URL)] && isNavigable(d.URL) && it.Depth >= c.cfg.Crawl.Depth {
+			c.noteCompletion("depth_boundary_unvisited", 1)
+		}
 		// 与 links 入队同规则：深度闸门内才回灌（discovered 始终记录）
 		if !seen[normalize(d.URL)] && isNavigable(d.URL) && it.Depth < c.cfg.Crawl.Depth {
 			*queue = append(*queue, item{URL: d.URL, Depth: it.Depth + 1})

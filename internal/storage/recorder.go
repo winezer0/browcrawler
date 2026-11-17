@@ -66,16 +66,18 @@ type Recorder struct {
 	saveJS    bool
 	saveJSDir string
 
-	mu         sync.Mutex
-	file       *os.File
-	enc        *json.Encoder
-	sessionID  string
-	taskID     string
-	maxBody    int64
-	skipStatic bool
-	rawDump    bool
-	seq        int64
-	records    []Record
+	mu               sync.Mutex
+	file             *os.File
+	enc              *json.Encoder
+	sessionID        string
+	taskID           string
+	maxBody          int64
+	skipStatic       bool
+	rawDump          bool
+	seq              int64
+	records          []Record
+	completion       *ScanCompletion
+	completionCounts map[string]int
 	// lastStatus: URL（去尾斜杠）→ 最近一次录制的状态码，供爬虫 429/503
 	// 重试判定 O(1) 查询。独立于 records 内存上限（长任务 records 停止
 	// 追加后，map 仍持续更新，语义始终是"最近一次"）。
@@ -301,7 +303,7 @@ func (r *Recorder) finalize(rec *Record, buf []byte, total int64, truncated bool
 	}
 	ct := strings.ToLower(rec.ContentType)
 	switch {
-	case total > r.maxBody:
+	case total > r.maxBody || int64(len(data)) > r.maxBody:
 		// 设计文档 §6：超限只记录元信息（status/header/url/size），丢弃 body。
 		rec.BodyOmitted = "too_large"
 	case !isTextual(ct, data):
@@ -334,12 +336,19 @@ func (r *Recorder) write(rec *Record) {
 	}
 	if err := r.enc.Encode(rec); err == nil {
 		r.written++
+	} else {
+		r.noteRecordingLimit("output_failure")
+	}
+	if (rec.InScope == nil || *rec.InScope) && (rec.BodyOmitted == "too_large" || rec.BodyOmitted == "stream_closed") && (rec.ResourceType == "script" || rec.ResourceType == "document" || strings.Contains(rec.ContentType, "javascript")) {
+		r.noteRecordingLimit("response_body_incomplete")
 	}
 	r.lastStatus[strings.TrimSuffix(rec.URL, "/")] = rec.Status
 	size := int64(len(rec.Body) + len(rec.RequestBody) + len(rec.URL) + 512)
 	if len(r.records) < r.maxInMemory && r.memBytes+size <= r.maxMemBytes {
 		r.records = append(r.records, *rec)
 		r.memBytes += size
+	} else {
+		r.noteRecordingLimit("report_retention_limit")
 	}
 	if r.saveJS && rec.ResourceType == "script" && rec.Body != "" {
 		r.saveJSSource(rec)

@@ -32,6 +32,9 @@ type jsExtractionResult struct {
 	TruncatedChunkBodies int64
 	FetchedChunks        int64
 	ChunkFetchErrors     int64
+	ChunkCountLimited    int64
+	ChunkDepthLimited    int64
+	ChunkBytesLimited    int64
 }
 
 type bundleChunkFetcher func(context.Context, string, int64) ([]byte, bool, error)
@@ -73,13 +76,37 @@ func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL s
 
 	var attempted, fetched, fetchErrors, truncatedBodies int64
 	var totalBytes int64
+	finalize := func(current jsExtractionResult) jsExtractionResult {
+		current.FetchedChunks = fetched
+		current.ChunkFetchErrors = fetchErrors
+		current.TruncatedChunkBodies = truncatedBodies
+		if !options.Enabled {
+			return current
+		}
+		pending := map[string]bool{}
+		for _, candidate := range current.Chunks {
+			key := chunkURLKey(candidate.URL)
+			if key == "" || pending[key] || !sameOrigin(pageURL, candidate.URL) {
+				continue
+			}
+			if _, known := knownBodies[key]; known {
+				continue
+			}
+			pending[key] = true
+			if candidate.Depth > options.MaxDepth {
+				current.ChunkDepthLimited++
+			} else if attempted >= int64(options.MaxCount) {
+				current.ChunkCountLimited++
+			} else if totalBytes >= options.MaxTotalBytes {
+				current.ChunkBytesLimited++
+			}
+		}
+		return current
+	}
 	for {
 		current := extractJS(allBodies, pageURL, depths)
 		if !options.Enabled || fetch == nil || ctx.Err() != nil || attempted >= int64(options.MaxCount) {
-			current.FetchedChunks = fetched
-			current.ChunkFetchErrors = fetchErrors
-			current.TruncatedChunkBodies = truncatedBodies
-			return current
+			return finalize(current)
 		}
 
 		added := false
@@ -128,10 +155,7 @@ func expandBundleChunks(ctx context.Context, initial []storage.JSBody, pageURL s
 			added = true
 		}
 		if !added {
-			current.FetchedChunks = fetched
-			current.ChunkFetchErrors = fetchErrors
-			current.TruncatedChunkBodies = truncatedBodies
-			return current
+			return finalize(current)
 		}
 	}
 }
