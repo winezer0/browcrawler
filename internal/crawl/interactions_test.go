@@ -25,8 +25,10 @@ func TestInteractionScriptsRecollectStableTargetsAndScroll(t *testing.T) {
 	if !strings.Contains(clickInteractionJS, ".find(function(item)") || !strings.Contains(clickInteractionJS, "target.el.click()") {
 		t.Fatal("click script must resolve the current DOM target by stable key")
 	}
-	if !strings.Contains(interactionScrollStateJS, "scrollHeight") || !strings.Contains(interactionScrollStateJS, "innerHeight") {
-		t.Fatal("interaction exploration must inspect page scrolling")
+	for _, fragment := range []string{"scrollHeight", "innerHeight", "overflowY", "el.scrollTop", "frameDocument", "el.shadowRoot"} {
+		if !strings.Contains(interactionScrollStateJS, fragment) {
+			t.Errorf("scroll traversal missing %q", fragment)
+		}
 	}
 	if got := interactionScrollDelta(800); got != 640 {
 		t.Fatalf("scroll delta for 800px viewport = %d, want 640", got)

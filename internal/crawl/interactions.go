@@ -85,8 +85,102 @@ const clickInteractionJS = `function(key) {
 }`
 
 const interactionScrollStateJS = `function() {
-  var root = document.scrollingElement || document.documentElement;
-  return {height: root.scrollHeight, top: window.scrollY, viewport: window.innerHeight, width: window.innerWidth};
+  var targets = [];
+
+  function intersection(rect, clip) {
+    var left = Math.max(rect.left, clip.left);
+    var top = Math.max(rect.top, clip.top);
+    var right = Math.min(rect.right, clip.right);
+    var bottom = Math.min(rect.bottom, clip.bottom);
+    if (right - left < 2 || bottom - top < 2) return null;
+    return {left: left, top: top, right: right, bottom: bottom};
+  }
+
+  function rootIdentity(el, ordinal) {
+    var identity = ['id', 'data-testid', 'aria-label', 'name']
+      .map(function(name) { return el.getAttribute(name) || ''; })
+      .filter(Boolean).join('\u001f');
+    return el.tagName.toLowerCase() + ':' + (identity || ordinal);
+  }
+
+  function addWindow(view, rootPath, offsetX, offsetY, clip) {
+    var doc = view.document;
+    var root = doc.scrollingElement || doc.documentElement;
+    var box = intersection({
+      left: offsetX, top: offsetY,
+      right: offsetX + view.innerWidth, bottom: offsetY + view.innerHeight
+    }, clip);
+    if (!box || root.scrollHeight <= view.innerHeight + 2) return;
+    targets.push({
+      key: rootPath + '\u001ewindow',
+      top: Math.max(0, view.scrollY || root.scrollTop || 0),
+      height: root.scrollHeight,
+      viewport: view.innerHeight,
+      x: (box.left + box.right) / 2,
+      y: (box.top + box.bottom) / 2
+    });
+  }
+
+  function walk(root, rootPath, view, offsetX, offsetY, clip) {
+    Array.from(root.querySelectorAll('*')).forEach(function(el, ordinal) {
+      var ownerView = (el.ownerDocument && el.ownerDocument.defaultView) || view;
+      var style = ownerView.getComputedStyle(el);
+      var isDocumentRoot = el === ownerView.document.scrollingElement ||
+        el === ownerView.document.documentElement || el === ownerView.document.body;
+      if (!isDocumentRoot && /^(auto|scroll|overlay)$/.test(style.overflowY || '')) {
+        var rect = el.getBoundingClientRect();
+        var box = intersection({
+          left: offsetX + rect.left, top: offsetY + rect.top,
+          right: offsetX + rect.right, bottom: offsetY + rect.bottom
+        }, clip);
+        if (box && el.scrollHeight > el.clientHeight + 2) {
+          targets.push({
+            key: rootPath + '\u001e' + rootIdentity(el, ordinal),
+            top: Math.max(0, el.scrollTop),
+            height: el.scrollHeight,
+            viewport: el.clientHeight,
+            x: (box.left + box.right) / 2,
+            y: (box.top + box.bottom) / 2
+          });
+        }
+      }
+
+      if (el.shadowRoot) {
+        walk(el.shadowRoot, rootPath + '\u001cshadow:' + rootIdentity(el, ordinal), view, offsetX, offsetY, clip);
+      }
+      if (el.tagName === 'IFRAME') {
+        try {
+          var frameDocument = el.contentDocument;
+          var frameView = frameDocument && frameDocument.defaultView;
+          if (frameDocument && frameView && frameDocument.documentElement) {
+            var frameRect = el.getBoundingClientRect();
+            var childOffsetX = offsetX + frameRect.left + el.clientLeft;
+            var childOffsetY = offsetY + frameRect.top + el.clientTop;
+            var frameClip = intersection({
+              left: childOffsetX, top: childOffsetY,
+              right: childOffsetX + Math.min(el.clientWidth, frameView.innerWidth),
+              bottom: childOffsetY + Math.min(el.clientHeight, frameView.innerHeight)
+            }, clip);
+            if (frameClip) {
+              var framePath = rootPath + '\u001cframe:' + rootIdentity(el, ordinal);
+              walk(frameDocument, framePath, frameView, childOffsetX, childOffsetY, frameClip);
+              addWindow(frameView, framePath, childOffsetX, childOffsetY, frameClip);
+            }
+          }
+        } catch (_) {
+          // Cross-origin frames cannot be inspected from the parent document.
+        }
+      }
+    });
+  }
+
+  walk(document, 'document', window, 0, 0, {
+    left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight
+  });
+  addWindow(window, 'document', 0, 0, {
+    left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight
+  });
+  return targets;
 }`
 
 type interactionTarget struct {
@@ -95,11 +189,13 @@ type interactionTarget struct {
 	Text string `json:"text"`
 }
 
-type interactionScrollState struct {
-	Height   int `json:"height"`
-	Top      int `json:"top"`
-	Viewport int `json:"viewport"`
-	Width    int `json:"width"`
+type interactionScrollTarget struct {
+	Key      string  `json:"key"`
+	Height   int     `json:"height"`
+	Top      int     `json:"top"`
+	Viewport int     `json:"viewport"`
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
 }
 
 func interactionScrollDelta(viewport int) int {
@@ -113,8 +209,8 @@ func interactionScrollDelta(viewport int) int {
 // TriggerInteractions repeatedly collects current visible controls, clicks
 // each stable target once, and scrolls through newly loaded content. Target
 // traversal includes open shadow roots and same-origin frames. Both operations
-// are bounded: click count is maxActions and scrolling is capped at 16 viewport
-// steps with two unchanged bottom checks before stopping.
+// are bounded: click count is maxActions and scrolling is capped at 32 steps
+// overall and 16 steps per scroll container.
 func (d *RodDriver) TriggerInteractions(ctx context.Context, maxActions int) (int, error) {
 	if maxActions <= 0 {
 		return 0, nil
@@ -122,8 +218,7 @@ func (d *RodDriver) TriggerInteractions(ctx context.Context, maxActions int) (in
 
 	clicked := 0
 	scrollSteps := 0
-	idleAtBottom := 0
-	lastHeight := -1
+	scrollStepsByTarget := make(map[string]int)
 	handled := make(map[string]struct{})
 	for clicked < maxActions {
 		if err := ctx.Err(); err != nil {
@@ -169,45 +264,44 @@ func (d *RodDriver) TriggerInteractions(ctx context.Context, maxActions int) (in
 			continue
 		}
 
-		if scrollSteps >= 16 {
+		if scrollSteps >= 32 {
 			break
 		}
-		var state interactionScrollState
+		var scrollTargets []interactionScrollTarget
 		err = d.withRetry(ctx, func(p *rod.Page) error {
 			obj, evalErr := p.Eval(interactionScrollStateJS)
 			if evalErr != nil {
 				return evalErr
 			}
-			return obj.Value.Unmarshal(&state)
+			return obj.Value.Unmarshal(&scrollTargets)
 		})
 		if err != nil {
-			return clicked, fmt.Errorf("read interaction scroll state: %w", err)
+			return clicked, fmt.Errorf("read interaction scroll targets: %w", err)
 		}
-		if state.Height <= state.Viewport+2 {
-			break
-		}
-		atBottom := state.Top+state.Viewport >= state.Height-2
-		if atBottom && state.Height == lastHeight {
-			idleAtBottom++
-		} else {
-			idleAtBottom = 0
-		}
-		if idleAtBottom >= 2 {
-			break
-		}
-		lastHeight = state.Height
-		err = d.withRetry(ctx, func(p *rod.Page) error {
-			if state.Width > 1 && state.Viewport > 1 {
-				if moveErr := p.Mouse.MoveTo(proto.Point{X: float64(state.Width / 2), Y: float64(state.Viewport / 2)}); moveErr != nil {
-					return moveErr
-				}
+		var nextScroll *interactionScrollTarget
+		for i := range scrollTargets {
+			maxTop := scrollTargets[i].Height - scrollTargets[i].Viewport
+			if scrollTargets[i].Top >= maxTop-2 || scrollStepsByTarget[scrollTargets[i].Key] >= 16 {
+				continue
 			}
-			return p.Mouse.Scroll(0, float64(interactionScrollDelta(state.Viewport)), 1)
+			nextScroll = &scrollTargets[i]
+			break
+		}
+		if nextScroll == nil {
+			break
+		}
+		delta := interactionScrollDelta(nextScroll.Viewport)
+		err = d.withRetry(ctx, func(p *rod.Page) error {
+			if moveErr := p.Mouse.MoveTo(proto.Point{X: nextScroll.X, Y: nextScroll.Y}); moveErr != nil {
+				return moveErr
+			}
+			return p.Mouse.Scroll(0, float64(delta), 1)
 		})
 		if err != nil {
 			return clicked, fmt.Errorf("scroll during interaction discovery: %w", err)
 		}
 		scrollSteps++
+		scrollStepsByTarget[nextScroll.Key]++
 		if err := waitForScrollSettle(ctx); err != nil {
 			return clicked, err
 		}
