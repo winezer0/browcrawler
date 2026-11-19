@@ -3,7 +3,7 @@
 
 # 渲染后端：obscura（默认）/ chrome（降级后端）/ auto（Obscura 启动失败自动降级 Chrome）
 browser_backend: obscura
-obscura_bin: "./bin/obscura/obscura.exe"
+obscura_bin: "./third/obscura/obscura.exe"
 chrome_bin: "./bin/chrome/chrome-win64/chrome.exe"
 max_session: 1
 max_body_size: 2097152
@@ -19,6 +19,10 @@ upstream_proxy: "http://127.0.0.1:10808"
 
 crawl:
   depth: 2
+  # 先用 basecrawler 做只读静态 HTTP 发现，再把候选交给浏览器渲染并录制运行时流量。
+  # 静态阶段默认每个种子最多 200 个请求；可设为 false 或使用 --no-basecrawler 关闭。
+  basecrawler_enabled: true
+  basecrawler_max_urls: 200
   # 作用域档位：fqdn（精确主机）| rdn（根域+子域，katana 默认语义）|
   # dnk（域名关键字）| regex（自定义正则，用 scope_value）| all（不限域）
   # 空 = legacy（由 scope 字符串推导）。双层生效：导航入队 + 交付物

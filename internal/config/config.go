@@ -45,6 +45,10 @@ type Config struct {
 type CrawlConfig struct {
 	Depth int    `yaml:"depth"`
 	Scope string `yaml:"scope"`
+	// BasecrawlerEnabled runs the bounded static HTTP crawler before browser navigation.
+	BasecrawlerEnabled bool `yaml:"basecrawler_enabled"`
+	// BasecrawlerMaxURLs limits static HTTP fetches per seed.
+	BasecrawlerMaxURLs int `yaml:"basecrawler_max_urls"`
 	// WSCapture WebSocket 帧捕获（默认开，纯只读观察）：经 CDP Network 事件
 	// 记录 WS 建连/握手/帧/关闭，帧以 resource_type=websocket 进 JSONL。
 	WSCapture bool `yaml:"ws_capture"`
@@ -179,6 +183,7 @@ func Default() *Config {
 		Stealth:        true,
 		Crawl: CrawlConfig{
 			Depth: 2, JSExtract: true, SkipStaticBody: true, SettleMS: 600,
+			BasecrawlerEnabled: true, BasecrawlerMaxURLs: 200,
 			MaxPages: 0, RatePerSec: 0, FormSubmit: true, URLPatternThreshold: 10,
 			URLPatternTTLSeconds: 0, NavRetries: 0, HostRatePerSec: 0,
 			WSCapture:    true,

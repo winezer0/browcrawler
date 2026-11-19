@@ -63,6 +63,9 @@ func (c *Config) validateScalars() error {
 	if c.Crawl.MaxPages < 0 {
 		return fmt.Errorf("crawl.max_pages=%d 必须 >= 0", c.Crawl.MaxPages)
 	}
+	if c.Crawl.BasecrawlerEnabled && c.Crawl.BasecrawlerMaxURLs < 1 {
+		return fmt.Errorf("crawl.basecrawler_max_urls=%d 必须 >= 1 when basecrawler_enabled", c.Crawl.BasecrawlerMaxURLs)
+	}
 	if c.Crawl.RatePerSec < 0 {
 		return fmt.Errorf("crawl.rate_per_sec=%v 必须 >= 0", c.Crawl.RatePerSec)
 	}

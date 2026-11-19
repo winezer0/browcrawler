@@ -5,8 +5,11 @@ package crawl
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
+
+	"github.com/winezer0/basecrawler"
 
 	"github.com/winezer0/browcrawler/internal/config"
 )
@@ -101,6 +104,91 @@ func ScopeFromCfg(c config.CrawlConfig) (func(string) bool, error) {
 	default:
 		return nil, fmt.Errorf("scope_mode 非法: %q（可选 fqdn|rdn|dnk|regex|all）", mode)
 	}
+}
+
+// BasecrawlerScope translates browcrawler's host-scope rules into the URL
+// matcher understood by basecrawler. Keeping the same rule here prevents the
+// static pass from fetching hosts that the browser pass would reject.
+func BasecrawlerScope(c config.CrawlConfig) (basecrawler.Scope, *regexp.Regexp, error) {
+	if _, err := ScopeFromCfg(c); err != nil {
+		return 0, nil, err
+	}
+	mode := strings.ToLower(strings.TrimSpace(c.ScopeMode))
+	value := strings.TrimSpace(c.ScopeValue)
+	legacy := strings.TrimSpace(c.Scope)
+	if mode == "" {
+		switch {
+		case legacy == "" || legacy == "*":
+			mode = ScopeAll
+		case strings.HasPrefix(legacy, "re:"):
+			mode, value = ScopeRegex, strings.TrimPrefix(legacy, "re:")
+		default:
+			mode = ScopeRDN
+		}
+	}
+	if mode == ScopeAll {
+		return basecrawler.ScopeAny, nil, nil
+	}
+
+	var hostPattern string
+	switch mode {
+	case ScopeFQDN:
+		hosts, err := scopeEntries(value, legacy)
+		if err != nil {
+			return 0, nil, err
+		}
+		patterns := make([]string, 0, len(hosts))
+		for _, host := range hosts {
+			patterns = append(patterns, baseHostPattern(host))
+		}
+		hostPattern = "(?:" + strings.Join(patterns, "|") + ")"
+	case ScopeRDN:
+		roots, err := scopeEntries(value, legacy)
+		if err != nil {
+			return 0, nil, err
+		}
+		patterns := make([]string, 0, len(roots))
+		for _, root := range roots {
+			patterns = append(patterns, `(?:[^./:]+\.)*`+baseHostPattern(rootDomain(root)))
+		}
+		hostPattern = "(?:" + strings.Join(patterns, "|") + ")"
+	case ScopeDNK:
+		if value == "" {
+			value = legacy
+		}
+		if value == "" {
+			return 0, nil, fmt.Errorf("scope_mode=dnk 需要 scope_value 关键字")
+		}
+		hostPattern = `[^/?#:]*` + regexp.QuoteMeta(strings.ToLower(value)) + `[^/?#:]*`
+	case ScopeRegex:
+		if value == "" {
+			return 0, nil, fmt.Errorf("scope_mode=regex 需要 scope_value 正则")
+		}
+		// ScopeFromCfg validates this expression against hostnames. Remove only
+		// outer anchors so it can be embedded between the URL authority markers.
+		hostPattern = strings.TrimPrefix(value, "^")
+		hostPattern = strings.TrimSuffix(hostPattern, "$")
+	default:
+		return 0, nil, fmt.Errorf("scope_mode 非法: %q", mode)
+	}
+
+	pattern := `(?i)^https?://(?:[^/?#@]+@)?(?:` + hostPattern + `)(?::[0-9]+)?(?:[/?#]|$)`
+	if mode == ScopeRegex {
+		pattern = `^https?://(?:[^/?#@]+@)?(?:` + hostPattern + `)(?::[0-9]+)?(?:[/?#]|$)`
+	}
+	rx, err := regexp.Compile(pattern)
+	if err != nil {
+		return 0, nil, fmt.Errorf("compile basecrawler scope: %w", err)
+	}
+	return basecrawler.ScopeRegex, rx, nil
+}
+
+func baseHostPattern(host string) string {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	if ip := net.ParseIP(host); ip != nil && strings.Contains(host, ":") {
+		return `\[` + regexp.QuoteMeta(host) + `\]`
+	}
+	return regexp.QuoteMeta(host)
 }
 
 // scopeEntries 解析作用域主机列表：优先 ScopeValue，空则回退 legacy Scope

@@ -21,6 +21,13 @@ func TestDefaultJSChunkBudgets(t *testing.T) {
 	}
 }
 
+func TestDefaultBasecrawlerBudget(t *testing.T) {
+	c := Default().Crawl
+	if !c.BasecrawlerEnabled || c.BasecrawlerMaxURLs != 200 {
+		t.Fatalf("unexpected basecrawler defaults: enabled=%t max_urls=%d", c.BasecrawlerEnabled, c.BasecrawlerMaxURLs)
+	}
+}
+
 func TestValidateBackend(t *testing.T) {
 	for _, b := range []string{BackendObscura, BackendChrome, BackendAuto} {
 		c := Default()
@@ -46,6 +53,7 @@ func TestValidateNoSilentPhantoms(t *testing.T) {
 		{"max_session=0", func(c *Config) { c.MaxSession = 0 }},
 		{"max_body_size=0", func(c *Config) { c.MaxBodySize = 0 }},
 		{"negative depth", func(c *Config) { c.Crawl.Depth = -1 }},
+		{"zero enabled basecrawler budget", func(c *Config) { c.Crawl.BasecrawlerMaxURLs = 0 }},
 		{"negative js chunk depth", func(c *Config) { c.Crawl.JSChunks.MaxDepth = -1 }},
 		{"js chunk depth above hard limit", func(c *Config) { c.Crawl.JSChunks.MaxDepth = maxJSChunkDepth + 1 }},
 		{"negative js chunk count", func(c *Config) { c.Crawl.JSChunks.MaxCount = -1 }},
@@ -71,6 +79,12 @@ func TestValidateNoSilentPhantoms(t *testing.T) {
 		if err := c.Validate(); err == nil {
 			t.Errorf("%s 应被明确拒绝，不能静默忽略", tc.name)
 		}
+	}
+	disabled := Default()
+	disabled.Crawl.BasecrawlerEnabled = false
+	disabled.Crawl.BasecrawlerMaxURLs = 0
+	if err := disabled.Validate(); err != nil {
+		t.Fatalf("disabled basecrawler may omit its URL budget: %v", err)
 	}
 }
 

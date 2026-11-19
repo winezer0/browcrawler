@@ -28,6 +28,11 @@ type Stats struct {
 	Pages                  int                    `json:"pages"`
 	Failed                 int                    `json:"failed"`
 	Discovered             int                    `json:"discovered"`
+	BasecrawlerCandidates  int                    `json:"basecrawler_candidates"`
+	BasecrawlerQueued      int                    `json:"basecrawler_queued"`
+	FeedCandidates         int                    `json:"feed_candidates"`
+	BrowserDiscovered      int                    `json:"browser_discovered"`
+	BasecrawlerElapsedMS   int64                  `json:"basecrawler_elapsed_ms"`
 	JSLinks                int                    `json:"js_links"`
 	BundleChunksFetched    int64                  `json:"bundle_chunks_fetched"`
 	BundleTruncated        int64                  `json:"bundle_truncated"`
@@ -43,43 +48,51 @@ type item struct {
 }
 
 type Crawler struct {
-	cfg               *config.Config
-	driver            PageDriver
-	rec               *storage.Recorder
-	logger            *log.Logger
-	enc               *json.Encoder
-	discoverySeen     map[string]bool
-	completionReasons map[string]int
-	outFile           *os.File
-	scope             func(string) bool
-	safetyFilter      *safety.Safety
-	wsMu              sync.Mutex
-	wsURLs            map[string]string // CDP requestID -> ws(s) 建连 URL
-	limiter           *policy.Limiter
-	robots            *policy.Robots
-	dedup             *DedupSession
-	credentials       *Credentials
-	checkpointPath    string
-	resume            bool
-	metrics           metrics.Recorder
+	cfg                *config.Config
+	driver             PageDriver
+	rec                *storage.Recorder
+	logger             *log.Logger
+	enc                *json.Encoder
+	discoverySeen      map[string]bool
+	completionReasons  map[string]int
+	outFile            *os.File
+	scope              func(string) bool
+	safetyFilter       *safety.Safety
+	wsMu               sync.Mutex
+	wsURLs             map[string]string // CDP requestID -> ws(s) 建连 URL
+	limiter            *policy.Limiter
+	robots             *policy.Robots
+	dedup              *DedupSession
+	credentials        *Credentials
+	checkpointPath     string
+	resume             bool
+	metrics            metrics.Recorder
+	initialCandidates  []FeedSeed
+	baseCandidateCount int
+	feedCandidateCount int
+	basecrawlerElapsed time.Duration
 }
 
 // Options 显式列出爬虫的全部依赖；策略与指标为可选（零值/Nop 即关闭）。
 type Options struct {
-	Cfg             *config.Config
-	Driver          PageDriver
-	Rec             *storage.Recorder
-	DiscoveredPath  string
-	Logger          *log.Logger
-	Limiter         *policy.Limiter
-	Robots          *policy.Robots
-	Dedup           *DedupSession
-	Credentials     *Credentials // 真实凭据，优先于表单测试字典
-	CheckpointPath  string       // 非空时每页持久化断点（seen+队列）
-	Resume          bool         // true 且断点文件存在时从中断点恢复
-	NavRetries      int          // 导航失败/429|503 的重试次数（含退避）
-	MaxInteractions int          // 每页交互点击上限（0 = 禁用交互探索）
-	Metrics         metrics.Recorder
+	Cfg                   *config.Config
+	Driver                PageDriver
+	Rec                   *storage.Recorder
+	DiscoveredPath        string
+	Logger                *log.Logger
+	Limiter               *policy.Limiter
+	Robots                *policy.Robots
+	Dedup                 *DedupSession
+	Credentials           *Credentials // 真实凭据，优先于表单测试字典
+	CheckpointPath        string       // 非空时每页持久化断点（seen+队列）
+	Resume                bool         // true 且断点文件存在时从中断点恢复
+	NavRetries            int          // 导航失败/429|503 的重试次数（含退避）
+	MaxInteractions       int          // 每页交互点击上限（0 = 禁用交互探索）
+	Metrics               metrics.Recorder
+	InitialCandidates     []FeedSeed
+	BasecrawlerCandidates int
+	FeedCandidates        int
+	BasecrawlerElapsed    time.Duration
 }
 
 func bundleChunkOptionsFromConfig(cfg *config.Config) bundleChunkOptions {
@@ -122,10 +135,63 @@ func New(o Options) (*Crawler, error) {
 		wsURLs:  map[string]string{},
 		limiter: o.Limiter, robots: o.Robots, dedup: o.Dedup, credentials: o.Credentials,
 		checkpointPath: o.CheckpointPath, resume: o.Resume, metrics: m,
+		initialCandidates:  append([]FeedSeed(nil), o.InitialCandidates...),
+		baseCandidateCount: o.BasecrawlerCandidates, feedCandidateCount: o.FeedCandidates,
+		basecrawlerElapsed: o.BasecrawlerElapsed,
 	}, nil
 }
 
 func (c *Crawler) Close() error { return c.outFile.Close() }
+
+func (c *Crawler) prepareInitialCandidates(seed string, st *Stats) ([]item, error) {
+	queue := []item{{URL: seed, Depth: 0}}
+	queued := map[string]bool{normalize(seed): true}
+	for _, candidate := range c.initialCandidates {
+		u, err := url.Parse(candidate.URL)
+		if err != nil || u.Hostname() == "" || !c.scope(u.Hostname()) {
+			continue
+		}
+		source := candidate.Source
+		if candidate.Origin == "basecrawler" {
+			source = "basecrawler:" + source
+		} else if source == "" {
+			source = "feed"
+		}
+		d := Discovery{
+			URL: candidate.URL, Source: source, From: candidate.From, Depth: candidate.Depth,
+			Method: candidate.Method, Kind: candidate.Kind, StatusCode: candidate.StatusCode,
+			ContentType: candidate.ContentType, Confidence: candidate.Confidence,
+		}
+		n, err := c.writeDiscovery(d)
+		if err != nil {
+			return nil, err
+		}
+		st.Discovered += n
+		if candidate.Method != "" && !strings.EqualFold(candidate.Method, "GET") {
+			continue
+		}
+		if strings.EqualFold(candidate.Confidence, "template") || !isNavigable(candidate.URL) {
+			continue
+		}
+		depth := candidate.Depth
+		if depth <= 0 {
+			depth = 1
+		}
+		if depth > c.cfg.Crawl.Depth || c.safetyFilter.SkipURL(candidate.URL) {
+			continue
+		}
+		key := normalize(candidate.URL)
+		if key == "" || queued[key] {
+			continue
+		}
+		queued[key] = true
+		queue = append(queue, item{URL: candidate.URL, Depth: depth})
+		if candidate.Origin == "basecrawler" {
+			st.BasecrawlerQueued++
+		}
+	}
+	return queue, nil
+}
 
 // Run 以 seed 为根做 BFS，深度上限来自配置。
 // 统计用命名返回值 + defer 收尾，保证 Ctrl+C / 超时中断时也能拿到真实的记录数与耗时。
@@ -148,13 +214,24 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 		st.Records, _ = c.rec.Stats()
 		st.Elapsed = time.Since(t0)
 		st.ElapsedMS = st.Elapsed.Milliseconds()
+		st.BasecrawlerCandidates = c.baseCandidateCount
+		st.FeedCandidates = c.feedCandidateCount
+		st.BasecrawlerElapsedMS = c.basecrawlerElapsed.Milliseconds()
 		c.metrics.Inc("crawl.pages_ok", int64(st.Pages))
 		c.metrics.Inc("crawl.pages_failed", int64(st.Failed))
 		c.metrics.Inc("crawl.discovered", int64(st.Discovered))
 		c.metrics.Inc("crawl.traffic_records", st.Records)
 		c.metrics.Inc("crawl.elapsed_ms", st.ElapsedMS)
+		c.metrics.Inc("crawl.basecrawler_candidates", int64(st.BasecrawlerCandidates))
+		c.metrics.Inc("crawl.basecrawler_queued", int64(st.BasecrawlerQueued))
+		c.metrics.Inc("crawl.feed_candidates", int64(st.FeedCandidates))
+		c.metrics.Inc("crawl.browser_discovered", int64(st.BrowserDiscovered))
+		c.metrics.Inc("crawl.basecrawler_elapsed_ms", st.BasecrawlerElapsedMS)
 	}()
-	queue := []item{{URL: seed, Depth: 0}}
+	queue, err := c.prepareInitialCandidates(seed, &st)
+	if err != nil {
+		return st, err
+	}
 	seen := map[string]bool{}
 	if c.cfg.Crawl.RuntimeRoute {
 		InjectRuntimeRouteHook(ctx, c.driver)
@@ -280,7 +357,9 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 		links := ExtractLinks(it.URL, doc)
 		var jsLinks []Discovery
 		if c.cfg.Crawl.RuntimeRoute {
-			st.Discovered += c.collectRuntimeRoutes(ctx, it, seen, &queue)
+			n := c.collectRuntimeRoutes(ctx, it, seen, &queue)
+			st.Discovered += n
+			st.BrowserDiscovered += n
 		}
 		if c.cfg.Crawl.JSExtract {
 			analysis := extractJSWithChunks(ctx, c.driver, c.rec.TakeJS(), it.URL, bundleChunkOptionsFromConfig(c.cfg))
@@ -324,6 +403,7 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 				return st, err
 			}
 			st.Discovered += n
+			st.BrowserDiscovered += n
 		}
 		var formRecords, postLinks []Discovery
 		if c.cfg.Crawl.MaxInteractions > 0 {
@@ -344,7 +424,9 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 				}
 				// 交互触发的 SPA 路由跳转（pushState hook）在此刻已入 hook 数组
 				if c.cfg.Crawl.RuntimeRoute {
-					st.Discovered += c.collectRuntimeRoutes(ctx, it, seen, &queue)
+					n := c.collectRuntimeRoutes(ctx, it, seen, &queue)
+					st.Discovered += n
+					st.BrowserDiscovered += n
 				}
 			}
 		}
@@ -370,6 +452,7 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 				return st, err
 			}
 			st.Discovered += n
+			st.BrowserDiscovered += n
 		}
 		if it.Depth >= c.cfg.Crawl.Depth {
 			for _, d := range append(links, postLinks...) {
@@ -400,6 +483,7 @@ func (c *Crawler) Run(ctx context.Context, seed string) (st Stats, runErr error)
 					return st, err
 				}
 				st.Discovered += n
+				st.BrowserDiscovered += n
 				c.metrics.Inc("crawl.safety_url_skipped", 1)
 				continue
 			}
@@ -464,9 +548,10 @@ func isNavigable(raw string) bool {
 }
 
 func (s Stats) String() string {
-	return fmt.Sprintf("pages=%d failed=%d discovered=%d js_links=%d chunks=%d bundle_truncated=%d bundle_chunk_fetch_errors=%d traffic=%d elapsed=%dms",
-		s.Pages, s.Failed, s.Discovered, s.JSLinks, s.BundleChunksFetched, s.BundleTruncated,
-		s.BundleChunkFetchErrors, s.Records, s.ElapsedMS)
+	return fmt.Sprintf("pages=%d failed=%d discovered=%d basecrawler_candidates=%d basecrawler_queued=%d feed_candidates=%d browser_discovered=%d basecrawler_elapsed=%dms js_links=%d chunks=%d bundle_truncated=%d bundle_chunk_fetch_errors=%d traffic=%d elapsed=%dms",
+		s.Pages, s.Failed, s.Discovered, s.BasecrawlerCandidates, s.BasecrawlerQueued,
+		s.FeedCandidates, s.BrowserDiscovered, s.BasecrawlerElapsedMS, s.JSLinks,
+		s.BundleChunksFetched, s.BundleTruncated, s.BundleChunkFetchErrors, s.Records, s.ElapsedMS)
 }
 
 func (c *Crawler) noteCompletion(code string, count int) {

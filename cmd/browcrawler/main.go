@@ -43,6 +43,8 @@ type cli struct {
 	Interactions         int     `name:"interactions" help:"每页交互点击上限（触发 onclick 隐藏接口，0=禁用）" default:"0"`
 	NoForms              bool    `name:"no-forms" help:"关闭表单自动填充与提交"`
 	NoSafety             bool    `name:"no-safety" help:"关闭危险操作防护（登出/改密码/删除类将真实触发，慎用）"`
+	NoBasecrawler        bool    `name:"no-basecrawler" help:"关闭内置 basecrawler 静态 HTTP 发现"`
+	BasecrawlerMaxURLs   int     `name:"basecrawler-max-urls" help:"basecrawler 每个种子的静态请求上限" default:"-1"`
 	ObeyRobots           bool    `name:"obey-robots" help:"遵守目标站点 robots.txt"`
 	ScopeMode            string  `name:"scope-mode" help:"作用域档位 fqdn|rdn|dnk|regex|all（空=legacy 由 --scope 推导）"`
 	ScopeValue           string  `name:"scope-value" help:"scope-mode=dnk 的关键字 / regex 的正则；fqdn/rdn 留空用 seed 主机"`
@@ -131,6 +133,8 @@ func (c *cli) toOverrides() app.Overrides {
 		NoRuntimeRoute:        c.NoRuntimeRoute,
 		NoWSCapture:           c.NoWSCapture,
 		NoSafety:              c.NoSafety,
+		NoBasecrawler:         c.NoBasecrawler,
+		BasecrawlerMaxURLs:    c.BasecrawlerMaxURLs,
 		FeedPath:              c.FeedPath,
 		DeliverOutScope:       c.DeliverOutScope,
 		Backend:               c.Backend,

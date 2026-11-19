@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/winezer0/browcrawler/internal/browserrunner"
 	"github.com/winezer0/browcrawler/internal/config"
@@ -199,27 +200,61 @@ func (a *App) runOne(ctx context.Context, seed string, idx, total int) error {
 			}
 		}
 	}
+
+	taskStarted := time.Now()
+	taskCtx, cancel := context.WithTimeout(ctx, a.cfg.Timeout.Task())
+	defer cancel()
+	var baseCandidates []crawl.FeedSeed
+	var basecrawlerElapsed time.Duration
+	if a.cfg.Crawl.BasecrawlerEnabled {
+		if len(a.cfg.Policy.IPAllow) > 0 || len(a.cfg.Policy.IPDeny) > 0 {
+			a.logger.Printf("%s[basecrawler] static pass skipped: IP allow/deny policy is not available to the HTTP crawler", prefix)
+		} else {
+			started := time.Now()
+			var staticErr error
+			baseCandidates, staticErr = crawl.DiscoverBasecrawler(taskCtx, seed, a.cfg.Crawl,
+				a.cfg.ObeyRobots, a.cfg.MaxBodySize, a.cfg.Timeout.Navigation(), sess.Proxy.ProxyAddr(), a.authHeader)
+			basecrawlerElapsed = time.Since(started)
+			if staticErr != nil {
+				a.logger.Printf("%s[basecrawler] static pass returned partial results: %v", prefix, staticErr)
+			}
+			a.logger.Printf("%s[basecrawler] candidates=%d elapsed=%s", prefix, len(baseCandidates), basecrawlerElapsed)
+		}
+	}
+	var feedCandidates []crawl.FeedSeed
+	if a.cfg.Crawl.FeedPath != "" {
+		var feedErr error
+		feedCandidates, feedErr = crawl.LoadFeed(a.cfg.Crawl.FeedPath)
+		if feedErr != nil {
+			a.logger.Printf("%s[feed] loaded %d candidates with warnings: %v", prefix, len(feedCandidates), feedErr)
+		}
+	}
+	initialCandidates := append(baseCandidates, feedCandidates...)
 	c, err := crawl.New(crawl.Options{
 		Cfg: a.cfg, Driver: sess.Driver, Rec: sess.Rec,
 		DiscoveredPath: out.Discovered, Logger: a.logger,
 		Limiter: a.limiter, Metrics: a.metrics, Robots: newRobots(a.cfg, sess),
 		Dedup: a.dedup, Credentials: a.creds,
-		CheckpointPath: crawl.CheckpointPathFor(a.checkpoints, seed),
-		Resume:         a.cfg.Crawl.Resume,
+		CheckpointPath:        crawl.CheckpointPathFor(a.checkpoints, seed),
+		Resume:                a.cfg.Crawl.Resume,
+		InitialCandidates:     initialCandidates,
+		BasecrawlerCandidates: len(baseCandidates),
+		FeedCandidates:        len(feedCandidates),
+		BasecrawlerElapsed:    basecrawlerElapsed,
 	})
 	if err != nil {
 		return fmt.Errorf("crawler init: %w", err)
 	}
 	defer c.Close()
 
-	taskCtx, cancel := context.WithTimeout(ctx, a.cfg.Timeout.Task())
-	defer cancel()
 	st, runErr := c.Run(taskCtx, seed)
+	totalElapsed := time.Since(taskStarted)
 	if runErr != nil {
 		a.logger.Printf("%s[result] interrupted: %v", prefix, runErr)
 	}
 	a.logger.Printf("%s[result] %s", prefix, st)
 	a.logger.Printf("%s[completion] %s complete=%t reasons=%v", prefix, st.Completion.Status, st.Completion.Complete, st.Completion.Reasons)
+	a.logger.Printf("%s[duration] basecrawler=%dms browser=%dms total=%dms", prefix, st.BasecrawlerElapsedMS, st.ElapsedMS, totalElapsed.Milliseconds())
 	a.logger.Printf("%s[result] traffic=%s discovered=%s", prefix, out.Traffic, out.Discovered)
 	if out.HAR != "" {
 		a.logger.Printf("%s[result] har=%s", prefix, out.HAR)

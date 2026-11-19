@@ -23,10 +23,16 @@ import (
 
 // FeedSeed 是一条外部回灌候选。
 type FeedSeed struct {
-	URL    string
-	Method string // 空 = GET；非 GET 只记录为发现（浏览器导航仅 GET）
-	Kind   string // basecrawler: chunk|route（透传到 discovered.source）
-	Source string // basecrawler 的 Source 透传，便于溯源
+	URL         string `json:"url"`
+	Method      string `json:"method,omitempty"` // 空 = GET；非 GET 只记录为发现
+	Kind        string `json:"kind,omitempty"`
+	Source      string `json:"source,omitempty"`
+	From        string `json:"referer,omitempty"`
+	Depth       int    `json:"depth,omitempty"`
+	StatusCode  int    `json:"status,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	Confidence  string `json:"confidence,omitempty"`
+	Origin      string `json:"-"` // basecrawler 或外部 feed
 }
 
 // LoadFeed 读取 -feed 文件：JSONL（basecrawler）或纯文本 URL 列表。
@@ -51,30 +57,34 @@ func LoadFeed(path string) ([]FeedSeed, error) {
 		}
 		if strings.HasPrefix(line, "{") {
 			var obj struct {
-				URL       string `json:"URL"`
-				Method    string `json:"Method"`
-				Kind      string `json:"Kind"`
-				Source    string `json:"Source"`
-				LowerURL  string `json:"url"`
-				LowerKind string `json:"kind"`
+				URL         string `json:"url"`
+				Method      string `json:"method"`
+				Kind        string `json:"kind"`
+				Source      string `json:"source"`
+				Referer     string `json:"referer"`
+				From        string `json:"from"`
+				Depth       int    `json:"depth"`
+				StatusCode  int    `json:"status"`
+				ContentType string `json:"content_type"`
+				Confidence  string `json:"confidence"`
 			}
 			if err := json.Unmarshal([]byte(line), &obj); err != nil {
 				skipped = append(skipped, fmt.Sprintf("line %d: bad json", lineNo))
 				continue
 			}
-			u := obj.URL
-			if u == "" {
-				u = obj.LowerURL
-			}
-			kind := obj.Kind
-			if kind == "" {
-				kind = obj.LowerKind
-			}
-			if u == "" {
+			if obj.URL == "" {
 				skipped = append(skipped, fmt.Sprintf("line %d: missing URL", lineNo))
 				continue
 			}
-			out = append(out, FeedSeed{URL: u, Method: strings.ToUpper(obj.Method), Kind: kind, Source: obj.Source})
+			from := obj.Referer
+			if from == "" {
+				from = obj.From
+			}
+			out = append(out, FeedSeed{
+				URL: obj.URL, Method: strings.ToUpper(obj.Method), Kind: obj.Kind, Source: obj.Source,
+				From: from, Depth: obj.Depth, StatusCode: obj.StatusCode, ContentType: obj.ContentType,
+				Confidence: obj.Confidence, Origin: "feed",
+			})
 			continue
 		}
 		// 纯文本行：须为绝对 http(s) URL
@@ -83,7 +93,7 @@ func LoadFeed(path string) ([]FeedSeed, error) {
 			skipped = append(skipped, fmt.Sprintf("line %d: not an absolute URL", lineNo))
 			continue
 		}
-		out = append(out, FeedSeed{URL: line})
+		out = append(out, FeedSeed{URL: line, Origin: "feed"})
 	}
 	if err := sc.Err(); err != nil {
 		return out, fmt.Errorf("read feed: %w", err)

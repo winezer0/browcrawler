@@ -13,11 +13,15 @@ import (
 
 // Discovery 是从页面/JS 中挖掘出的 URL 或接口。
 type Discovery struct {
-	URL    string `json:"url"`
-	Source string `json:"source"` // ast:... / regex:... / bundle-chunk:... / bundle-route:... / browser DOM sources
-	From   string `json:"from"`
-	Depth  int    `json:"depth"`
-	Method string `json:"method,omitempty"`
+	URL         string `json:"url"`
+	Source      string `json:"source"` // basecrawler, AST, runtime, or browser DOM source
+	From        string `json:"from"`
+	Depth       int    `json:"depth"`
+	Method      string `json:"method,omitempty"`
+	Kind        string `json:"kind,omitempty"`
+	StatusCode  int    `json:"status,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	Confidence  string `json:"confidence,omitempty"`
 }
 
 // ExtractLinks 从渲染后的 DOM 提取链接（含 iframe/form/script）。

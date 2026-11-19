@@ -27,6 +27,8 @@ type Overrides struct {
 	NoRuntimeRoute        bool
 	NoWSCapture           bool
 	NoSafety              bool
+	NoBasecrawler         bool
+	BasecrawlerMaxURLs    int
 	FeedPath              string
 	DeliverOutScope       bool
 	ScopeValue            string
@@ -115,6 +117,12 @@ func (o Overrides) Apply(c *config.Config) {
 	}
 	if o.NoSafety {
 		c.Crawl.Safety = false
+	}
+	if o.NoBasecrawler {
+		c.Crawl.BasecrawlerEnabled = false
+	}
+	if o.BasecrawlerMaxURLs > 0 {
+		c.Crawl.BasecrawlerMaxURLs = o.BasecrawlerMaxURLs
 	}
 	if o.FeedPath != "" {
 		c.Crawl.FeedPath = o.FeedPath

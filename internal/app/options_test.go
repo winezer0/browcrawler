@@ -20,7 +20,7 @@ func TestOverridesApply(t *testing.T) {
 		Passthrough: "a.com, *.b.com", IPAllow: "127.0.0.0/8", IPDeny: "10.0.0.0/8",
 		NoJSChunks: true, JSChunkMaxDepth: &chunkDepth, JSChunkMaxCount: &chunkCount,
 		JSChunkMaxBytes: &chunkBytes, JSChunkMaxTotalBytes: &totalChunkBytes,
-		JSChunkFetchTimeoutMS: &chunkTimeout,
+		JSChunkFetchTimeoutMS: &chunkTimeout, NoBasecrawler: true, BasecrawlerMaxURLs: 75,
 	}.Apply(c)
 
 	checks := map[string]bool{
@@ -40,6 +40,8 @@ func TestOverridesApply(t *testing.T) {
 		"per session ca":  c.Mitm.PerSessionCA,
 		"keep dir":        c.KeepSessionDir,
 		"no js-extract":   !c.Crawl.JSExtract,
+		"no basecrawler":  !c.Crawl.BasecrawlerEnabled,
+		"basecrawler max": c.Crawl.BasecrawlerMaxURLs == 75,
 		"no js chunks":    !c.Crawl.JSChunks.Enabled,
 		"chunk depth":     c.Crawl.JSChunks.MaxDepth == 3,
 		"chunk count":     c.Crawl.JSChunks.MaxCount == 24,
