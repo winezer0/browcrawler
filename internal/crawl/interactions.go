@@ -8,89 +8,200 @@ import (
 	"github.com/go-rod/rod"
 )
 
-// InteractionTrigger 是可选的交互式探索能力（katana -interactive / crawlergo
-// 事件分发的简化版）：页面加载后对可点击元素逐个派发 click，让 JS 侧行为
-// （onclick fetch 等）真实触发，其请求经 goproxy 进入请求包。
-// hook addEventListener 的完整状态机版本视简化版收益再评估。
+// InteractionTrigger is the optional browser-driven exploration capability.
+// It activates controls after each DOM change and performs bounded scrolling
+// so nested menus and scroll-triggered requests can be observed.
 type InteractionTrigger interface {
-	// TriggerInteractions 对当前页面最多派发 maxActions 次点击，返回实际派发数。
+	// TriggerInteractions dispatches at most maxActions clicks on the current page.
 	TriggerInteractions(ctx context.Context, maxActions int) (int, error)
 }
 
-// collectInteractionsJS 收集可点击元素（排他处理：不含表单 submit，避免与
-// 表单提交逻辑重复触发同一请求）。
+// Stable keys let the interaction loop re-query after framework rerenders
+// without relying on stale element indexes. Volatile state such as
+// aria-expanded is deliberately excluded so an opened menu is not clicked shut.
 const collectInteractionsJS = `function() {
-  var sel = 'button:not([disabled]), [role=button], [onclick], input[type=button], a[href^="#"]';
-  var targets = Array.from(document.querySelectorAll(sel)).filter(el =>
-    !(el.tagName === 'BUTTON' && (el.type === 'submit' || el.type === 'reset'))
-  );
-  return targets.slice(0, 200).map((el, i) => ({
-    index: i,
-    tag: el.tagName.toLowerCase(),
-    text: (el.textContent || '').trim().slice(0, 30)
-  }));
+  var sel = 'button:not([disabled]), [role=button], [role=menuitem], [onclick], input[type=button], a[href^="#"]';
+  var counts = new Map();
+  return Array.from(document.querySelectorAll(sel)).filter(function(el) {
+    if ((el.tagName === 'BUTTON' && (el.type === 'submit' || el.type === 'reset')) ||
+        el.disabled || el.getAttribute('aria-disabled') === 'true') return false;
+    var style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0;
+  }).slice(0, 200).map(function(el) {
+    var tag = el.tagName.toLowerCase();
+    var identity = ['id', 'data-testid', 'name', 'href', 'data-page', 'aria-label']
+      .map(function(name) { return el.getAttribute(name) || ''; }).join('\u001f');
+    var text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    var base = tag + '\u001e' + (identity.replace(/\u001f/g, '') ? identity : text);
+    var ordinal = counts.get(base) || 0;
+    counts.set(base, ordinal + 1);
+    return {key: base + '\u001d' + ordinal, tag: tag, text: text};
+  });
 }`
 
-// clickInteractionJS 点击第 n 个可点击元素；收集与点击间 DOM 可能因框架重渲染
-// 而漂移，点击目标以实时 query 为准，越界即跳过（爬虫场景可接受）。
-const clickInteractionJS = `function(n) {
-  var sel = 'button:not([disabled]), [role=button], [onclick], input[type=button], a[href^="#"]';
-  var targets = Array.from(document.querySelectorAll(sel)).filter(el =>
-    !(el.tagName === 'BUTTON' && (el.type === 'submit' || el.type === 'reset'))
-  );
-  var el = targets[n];
-  if (!el) return 'missing';
-  el.click();
+const clickInteractionJS = `function(key) {
+  var sel = 'button:not([disabled]), [role=button], [role=menuitem], [onclick], input[type=button], a[href^="#"]';
+  var counts = new Map();
+  var targets = Array.from(document.querySelectorAll(sel)).filter(function(el) {
+    if ((el.tagName === 'BUTTON' && (el.type === 'submit' || el.type === 'reset')) ||
+        el.disabled || el.getAttribute('aria-disabled') === 'true') return false;
+    var style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0;
+  }).slice(0, 200).map(function(el) {
+    var tag = el.tagName.toLowerCase();
+    var identity = ['id', 'data-testid', 'name', 'href', 'data-page', 'aria-label']
+      .map(function(name) { return el.getAttribute(name) || ''; }).join('\u001f');
+    var text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    var base = tag + '\u001e' + (identity.replace(/\u001f/g, '') ? identity : text);
+    var ordinal = counts.get(base) || 0;
+    counts.set(base, ordinal + 1);
+    return {key: base + '\u001d' + ordinal, el: el};
+  });
+  var target = targets.find(function(item) { return item.key === key; });
+  if (!target) return 'missing';
+  target.el.click();
   return 'clicked';
 }`
 
-// TriggerInteractions 实现 InteractionTrigger。
+const interactionScrollStateJS = `function() {
+  var root = document.scrollingElement || document.documentElement;
+  return {height: root.scrollHeight, top: window.scrollY, viewport: window.innerHeight};
+}`
+
+const scrollInteractionJS = `function() {
+  var root = document.scrollingElement || document.documentElement;
+  var maxTop = Math.max(0, root.scrollHeight - window.innerHeight);
+  var step = Math.max(300, Math.floor(window.innerHeight * 0.8));
+  window.scrollTo(0, Math.min(maxTop, window.scrollY + step));
+  return 'scrolled';
+}`
+
+type interactionTarget struct {
+	Key  string `json:"key"`
+	Tag  string `json:"tag"`
+	Text string `json:"text"`
+}
+
+type interactionScrollState struct {
+	Height   int `json:"height"`
+	Top      int `json:"top"`
+	Viewport int `json:"viewport"`
+}
+
+// TriggerInteractions repeatedly collects current visible controls, clicks
+// each stable target once, and scrolls through newly loaded content. Both
+// operations are bounded: click count is maxActions and scrolling is capped at
+// 16 viewport steps with two unchanged bottom checks before stopping.
 func (d *RodDriver) TriggerInteractions(ctx context.Context, maxActions int) (int, error) {
 	if maxActions <= 0 {
 		return 0, nil
 	}
-	var targets []struct {
-		Index int    `json:"index"`
-		Tag   string `json:"tag"`
-		Text  string `json:"text"`
-	}
-	err := d.withRetry(ctx, func(p *rod.Page) error {
-		obj, e := p.Eval(collectInteractionsJS)
-		if e != nil {
-			return e
-		}
-		return obj.Value.Unmarshal(&targets)
-	})
-	if err != nil {
-		return 0, fmt.Errorf("collect interactions: %w", err)
-	}
-	if len(targets) > maxActions {
-		targets = targets[:maxActions]
-	}
+
 	clicked := 0
-	for _, t := range targets {
-		if ctx.Err() != nil {
+	scrollSteps := 0
+	idleAtBottom := 0
+	lastHeight := -1
+	handled := make(map[string]struct{})
+	for clicked < maxActions {
+		if err := ctx.Err(); err != nil {
+			return clicked, err
+		}
+
+		targets, err := d.collectInteractionTargets(ctx)
+		if err != nil {
+			return clicked, fmt.Errorf("collect interactions: %w", err)
+		}
+		var next *interactionTarget
+		for i := range targets {
+			if _, exists := handled[targets[i].Key]; exists {
+				continue
+			}
+			next = &targets[i]
 			break
 		}
-		var how string
-		err := d.withRetry(ctx, func(p *rod.Page) error {
-			obj, e := p.Eval(clickInteractionJS, t.Index)
-			if e != nil {
-				return e
+		if next != nil {
+			handled[next.Key] = struct{}{}
+			var outcome string
+			err := d.withRetry(ctx, func(p *rod.Page) error {
+				obj, evalErr := p.Eval(clickInteractionJS, next.Key)
+				if evalErr != nil {
+					return evalErr
+				}
+				outcome = obj.Value.Str()
+				return nil
+			})
+			if err != nil {
+				if ctx.Err() != nil {
+					return clicked, ctx.Err()
+				}
+				continue
 			}
-			how = obj.Value.Str()
-			return nil
-		})
-		if err != nil || how == "missing" {
+			if outcome != "clicked" {
+				continue
+			}
+			clicked++
+			if err := waitForInteractionSettle(ctx); err != nil {
+				return clicked, err
+			}
 			continue
 		}
-		clicked++
-		// 每次点击后等待 settle，让 onclick 里的 fetch/XHR 发出并被录制。
-		select {
-		case <-ctx.Done():
-			return clicked, ctx.Err()
-		case <-time.After(400 * time.Millisecond):
+
+		if scrollSteps >= 16 {
+			break
+		}
+		var state interactionScrollState
+		err = d.withRetry(ctx, func(p *rod.Page) error {
+			obj, evalErr := p.Eval(interactionScrollStateJS)
+			if evalErr != nil {
+				return evalErr
+			}
+			return obj.Value.Unmarshal(&state)
+		})
+		if err != nil {
+			return clicked, fmt.Errorf("read interaction scroll state: %w", err)
+		}
+		atBottom := state.Top+state.Viewport >= state.Height-2
+		if atBottom && state.Height == lastHeight {
+			idleAtBottom++
+		} else {
+			idleAtBottom = 0
+		}
+		if idleAtBottom >= 2 {
+			break
+		}
+		lastHeight = state.Height
+		err = d.withRetry(ctx, func(p *rod.Page) error {
+			_, evalErr := p.Eval(scrollInteractionJS)
+			return evalErr
+		})
+		if err != nil {
+			return clicked, fmt.Errorf("scroll during interaction discovery: %w", err)
+		}
+		scrollSteps++
+		if err := waitForInteractionSettle(ctx); err != nil {
+			return clicked, err
 		}
 	}
 	return clicked, nil
+}
+
+func (d *RodDriver) collectInteractionTargets(ctx context.Context) ([]interactionTarget, error) {
+	var targets []interactionTarget
+	err := d.withRetry(ctx, func(p *rod.Page) error {
+		obj, evalErr := p.Eval(collectInteractionsJS)
+		if evalErr != nil {
+			return evalErr
+		}
+		return obj.Value.Unmarshal(&targets)
+	})
+	return targets, err
+}
+
+func waitForInteractionSettle(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(350 * time.Millisecond):
+		return nil
+	}
 }
