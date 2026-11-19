@@ -111,6 +111,7 @@ func TestPrepareInitialCandidatesDeduplicatesNavigationAndKeepsEvidence(t *testi
 			{URL: "https://example.test/docs", Source: "sitemap", From: "https://example.test/sitemap.xml", Depth: 1, StatusCode: 200, ContentType: "text/html", Origin: "basecrawler"},
 			{URL: "https://example.test/docs#section", Source: "a@href", From: "https://example.test/", Depth: 1, Origin: "feed"},
 			{URL: "https://example.test/api/items", Source: "form", Method: "POST", Depth: 1, Origin: "basecrawler"},
+			{URL: "https://example.test/api/search", Source: "js-ast:treesitter", Confidence: "clue", Depth: 1, Origin: "basecrawler"},
 			{URL: "https://example.test/users/{id}", Source: "route", Confidence: "template", Depth: 1, Origin: "basecrawler"},
 			{URL: "https://outside.invalid/", Source: "sitemap", Depth: 1, Origin: "basecrawler"},
 		},
@@ -127,8 +128,8 @@ func TestPrepareInitialCandidatesDeduplicatesNavigationAndKeepsEvidence(t *testi
 	if len(queue) != 2 || queue[1].URL != "https://example.test/docs" {
 		t.Fatalf("queue = %+v, want seed plus one unique URL", queue)
 	}
-	if stats.BasecrawlerQueued != 1 || stats.Discovered != 4 {
-		t.Fatalf("stats = %+v, want one basecrawler navigation and four in-scope evidence rows", stats)
+	if stats.BasecrawlerQueued != 1 || stats.Discovered != 5 {
+		t.Fatalf("stats = %+v, want one basecrawler navigation and five in-scope evidence rows", stats)
 	}
 
 	data, err := os.ReadFile(filepath.Join(dir, "discovered.jsonl"))
@@ -143,8 +144,8 @@ func TestPrepareInitialCandidatesDeduplicatesNavigationAndKeepsEvidence(t *testi
 		}
 		records = append(records, record)
 	}
-	if len(records) != 4 {
-		t.Fatalf("got %d evidence rows, want 4", len(records))
+	if len(records) != 5 {
+		t.Fatalf("got %d evidence rows, want 5", len(records))
 	}
 	if records[0].Source != "basecrawler:sitemap" || records[0].From != "https://example.test/sitemap.xml" ||
 		records[0].StatusCode != 200 || records[0].ContentType != "text/html" {

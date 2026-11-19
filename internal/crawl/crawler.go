@@ -170,7 +170,7 @@ func (c *Crawler) prepareInitialCandidates(seed string, st *Stats) ([]item, erro
 		if candidate.Method != "" && !strings.EqualFold(candidate.Method, "GET") {
 			continue
 		}
-		if strings.EqualFold(candidate.Confidence, "template") || !isNavigable(candidate.URL) {
+		if strings.EqualFold(candidate.Confidence, "template") || strings.EqualFold(candidate.Confidence, "clue") || !isNavigable(candidate.URL) {
 			continue
 		}
 		depth := candidate.Depth

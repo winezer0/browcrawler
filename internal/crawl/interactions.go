@@ -21,7 +21,10 @@ type InteractionTrigger interface {
 // 表单提交逻辑重复触发同一请求）。
 const collectInteractionsJS = `function() {
   var sel = 'button:not([disabled]), [role=button], [onclick], input[type=button], a[href^="#"]';
-  return Array.from(document.querySelectorAll(sel)).slice(0, 200).map((el, i) => ({
+  var targets = Array.from(document.querySelectorAll(sel)).filter(el =>
+    !(el.tagName === 'BUTTON' && (el.type === 'submit' || el.type === 'reset'))
+  );
+  return targets.slice(0, 200).map((el, i) => ({
     index: i,
     tag: el.tagName.toLowerCase(),
     text: (el.textContent || '').trim().slice(0, 30)
@@ -32,7 +35,10 @@ const collectInteractionsJS = `function() {
 // 而漂移，点击目标以实时 query 为准，越界即跳过（爬虫场景可接受）。
 const clickInteractionJS = `function(n) {
   var sel = 'button:not([disabled]), [role=button], [onclick], input[type=button], a[href^="#"]';
-  var el = document.querySelectorAll(sel)[n];
+  var targets = Array.from(document.querySelectorAll(sel)).filter(el =>
+    !(el.tagName === 'BUTTON' && (el.type === 'submit' || el.type === 'reset'))
+  );
+  var el = targets[n];
   if (!el) return 'missing';
   el.click();
   return 'clicked';
