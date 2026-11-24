@@ -152,3 +152,12 @@ cmd/crawler(仅CLI) → app(编排) → pool(会话池+巡检) → session(Optio
 ```
 
 设计文档（含全部实测记录）：`docs/实施方案.md`。上游去重库：[winezer0/requestfilter](https://github.com/winezer0/requestfilter)（MIT，含本项目贡献的路径段泛化）。
+
+
+## 2026-11-24 浏览器补充验收边界
+
+使用配置的 `third/obscura/obscura.exe`，并关闭内置 Basecrawler 单独测量浏览器：本地 Nuxt、React、Next 完整方法/URL 金集成功响应分别为 8/9、8/8、8/8。与 Basecrawler 独立结果合并为 25/25；该结果不代表公网复杂水合已经覆盖。Nuxt catalog 由服务端 useFetch 产生，浏览器发现该接口但本轮未实际请求；由基础爬虫补齐。
+
+公网 Next Docs 单页实测记录 41 条 HTTP、0 条 RSC，请求范围限于一个导航页面，耗时 78.763 秒；本轮未证明浏览器能够补齐冻结的 18 项 RSC。报告保留 page_limit，未将进程退出 0 视为覆盖验收通过。页面/资源取得成功不足以证明客户端水合与预取已执行。
+
+修复共享解析器来源命名适配：维持 `ast:goja`、`ast:treesitter` 标签，避免重复成 `ast:js-ast:goja`；不改变 URL 请求策略。验收工具及最终报告见根目录 tools/crawler_retained_acceptance.py、artifacts/crawler-comparison/retained-crawler-acceptance-20261124-release。

@@ -179,6 +179,10 @@ func addJSDiscovery(out *[]Discovery, seen map[string]bool, baseURL *url.URL, ra
 }
 
 func jsSource(mode, detail string) string {
+	if mode == "ast" {
+		// The shared parser includes its own namespace; preserve our public label.
+		detail = strings.TrimPrefix(detail, "js-ast:")
+	}
 	if detail == "" {
 		return mode + ":unknown"
 	}

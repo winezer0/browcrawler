@@ -7,6 +7,20 @@ import (
 	"github.com/winezer0/browcrawler/internal/storage"
 )
 
+func TestJSSourceNamespaces(t *testing.T) {
+	for _, tc := range []struct{ mode, detail, want string }{
+		{"ast", "js-ast:goja", "ast:goja"},
+		{"ast", "js-ast:treesitter", "ast:treesitter"},
+		{"ast", "goja", "ast:goja"},
+		{"bundle-route", "js-ast:goja", "bundle-route:js-ast:goja"},
+		{"regex", "", "regex:unknown"},
+	} {
+		if got := jsSource(tc.mode, tc.detail); got != tc.want {
+			t.Errorf("jsSource(%q, %q)=%q, want %q", tc.mode, tc.detail, got, tc.want)
+		}
+	}
+}
+
 // ExtractJS uses the shared parser and preserves source and HTTP method metadata.
 func TestExtractJSParserModes(t *testing.T) {
 	bodies := []storage.JSBody{
