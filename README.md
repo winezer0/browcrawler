@@ -161,3 +161,10 @@ cmd/crawler(仅CLI) → app(编排) → pool(会话池+巡检) → session(Optio
 公网 Next Docs 单页实测记录 41 条 HTTP、0 条 RSC，请求范围限于一个导航页面，耗时 78.763 秒；本轮未证明浏览器能够补齐冻结的 18 项 RSC。报告保留 page_limit，未将进程退出 0 视为覆盖验收通过。页面/资源取得成功不足以证明客户端水合与预取已执行。
 
 修复共享解析器来源命名适配：维持 `ast:goja`、`ast:treesitter` 标签，避免重复成 `ast:js-ast:goja`；不改变 URL 请求策略。验收工具及最终报告见根目录 tools/crawler_retained_acceptance.py、artifacts/crawler-comparison/retained-crawler-acceptance-20261124-release。
+
+
+### 2026-11-24 公网 RSC 采集验证
+
+统一比较脚本不再强制 --upstream none，默认使用配置中的 upstream_proxy；需要直连时显式传 --browser-upstream none。此前零 RSC 的运行与成功控制实验的代理条件不同，不能据此归因于 Obscura 不支持水合。
+
+当前生产链路（Obscura + MITM + 配置上游代理）单页录到 39 个不同 RSC URL、41 条 HTTP 200 text/x-component 响应，正文全部保存。相同代理下 2 秒与 25 秒等待的数量一致；本例无需靠增加等待解决。原始流量、命令和耗时见 artifacts/crawler-comparison/bounded-execution-production-20261124/，不同部署的历史精确 RSC 目标仍需独立核验。
